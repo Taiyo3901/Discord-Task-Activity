@@ -1,11 +1,14 @@
-import { useEffect } from "react";
-import { AuthGate } from "./auth/AuthGate";
-import { initDiscordSdk } from "./lib/discord";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "./lib/queryClient";
+import { ToastProvider } from "./components/ui/ToastProvider";
+import { DiscordActivityGate } from "./auth/DiscordActivityGate";
 
 export default function App() {
-  useEffect(() => {
-    void initDiscordSdk();
-  }, []);
-
-  return <AuthGate />;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>
+        <DiscordActivityGate />
+      </ToastProvider>
+    </QueryClientProvider>
+  );
 }

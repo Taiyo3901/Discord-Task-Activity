@@ -1,3 +1,12 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+export type AppSession = {
+  client: SupabaseClient;
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+};
+
 export type Role = "owner" | "admin" | "member" | "viewer";
 export type TaskStatus = "todo" | "doing" | "review" | "done";
 
@@ -14,6 +23,7 @@ export type Group = {
   id: string;
   name: string;
   discord_guild_id: string | null;
+  discord_webhook_url: string | null;
   created_by: string;
   created_at: string;
 };
@@ -31,6 +41,14 @@ export type Task = {
   updated_by: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type TaskSummary = Task & {
+  assignee_display_name: string | null;
+  assignee_avatar_url: string | null;
+  comment_count: number;
+  link_count: number;
+  attachment_count: number;
 };
 
 export type TaskPage = {

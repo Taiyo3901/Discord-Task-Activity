@@ -1,26 +1,21 @@
 # ロードマップ
 
-## Phase 1
+## 実装済み
 
-- Web公開
-- Discord Activity起動
-- OAuth
-- グループ、招待
-- タスク、予定、本文、URL、コメント、添付
-- Presence、自動保存、競合検知
+- Discord Activity(埋め込み)起動、Discordアカウントのみでのログイン
+- Trello風カンバンボード（ドラッグ&ドロップでステータス変更、インライン追加、優先度・期限・担当者）
+- タスク詳細（本文の共同編集、プレゼンス、自動保存、競合検知、コメント/リンク/添付ファイル、それぞれの削除）
+- 予定の作成/編集/削除
+- グループ作成、メンバー招待/ロール変更/削除、招待取消、グループ脱退
+- グループ設定（名前変更、Discord Webhook URL、連携サーバーID）
+- 期限が近い/超過したタスクと開始間近の予定をDiscord Webhookへ自動通知（pg_cron + pg_net、Botプロセス不要）
+- `/task add` スラッシュコマンドからのタスク作成（Discord HTTP Interactions Endpoint）
+- viewerロールの読み取り専用化、`profiles`の閲覧範囲を同一グループ内に限定
 
-## Phase 2
+## 未実装（今後の候補）
 
-- Discord Bot通知
-- Slash Command
-- Discordメッセージのタスク化
-- タスクごとのDiscordスレッド
-- 検索、活動ログ、通知設定
-
-## Phase 3
-
-- Google Calendar読み書き
-- Google Tasks同期
-- Google Docs出力
-- 編集履歴、復元
-- 高度なカレンダー
+- Discordメッセージからのタスク化、タスクごとのDiscordスレッド自動作成
+- 全文検索、活動ログ（誰が何をいつ変更したか）
+- 通知設定のカスタマイズ（リマインド頻度、対象ステータスなど）
+- カンバン列内でのカード並び替え（現状は列間のステータス変更のみ永続化）
+- Google Calendar / Tasks / Docs連携（ログインとは別の外部サービス連携として、必要になったタイミングで追加）

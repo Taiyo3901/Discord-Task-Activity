@@ -23,6 +23,7 @@ npm run dev
 
 ## ドキュメント
 
+- `docs/USAGE.md` — 使用方法（画面構成、タスク/予定/メンバー管理、スラッシュコマンドなど）
 - `docs/ARCHITECTURE.md` — 全体構成と同期方式
 - `docs/ROADMAP.md` — 実装済み/未実装機能
 - `docs/DEPLOY.md` — デプロイ手順

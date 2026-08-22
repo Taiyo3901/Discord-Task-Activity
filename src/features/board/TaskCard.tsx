@@ -24,6 +24,7 @@ export function TaskCard({ task, onOpen }: { task: TaskSummary; onOpen: () => vo
     <button
       ref={setNodeRef}
       className={`task-card ${isDragging ? "dragging" : ""}`}
+      data-priority={task.priority}
       style={style}
       onClick={onOpen}
       {...listeners}

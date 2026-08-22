@@ -4,8 +4,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2, XCircle } from "lucide-react";
 import type { Group, Role } from "../../types";
 import { useToast } from "../../components/ui/ToastProvider";
+import { Avatar } from "../../components/ui/Avatar";
 
-type Member = { id: string; supabase_user_id: string; role: Role; profiles: { display_name: string | null; discord_username: string | null } | null };
+type Member = {
+  id: string;
+  supabase_user_id: string;
+  role: Role;
+  profiles: { display_name: string | null; discord_username: string | null; avatar_url: string | null } | null;
+};
 type Invite = { id: string; discord_user_id: string; role: Role; status: string };
 
 export function MembersView({ client, group, currentUserId }: { client: SupabaseClient; group: Group; currentUserId: string }) {
@@ -22,7 +28,7 @@ export function MembersView({ client, group, currentUserId }: { client: Supabase
     queryFn: async () => {
       const { data, error } = await client
         .from("group_members")
-        .select("id,supabase_user_id,role,profiles(display_name,discord_username)")
+        .select("id,supabase_user_id,role,profiles(display_name,discord_username,avatar_url)")
         .eq("group_id", group.id)
         .eq("status", "active");
       if (error) throw error;
@@ -125,6 +131,7 @@ export function MembersView({ client, group, currentUserId }: { client: Supabase
           {members.map((m) => (
             <article className="list-card" key={m.id}>
               <div className="list-card-main">
+                <Avatar name={m.profiles?.display_name ?? m.profiles?.discord_username} url={m.profiles?.avatar_url} />
                 <div>
                   <div className="list-card-title">{m.profiles?.display_name ?? m.profiles?.discord_username ?? "メンバー"}</div>
                   <div className="list-card-sub">@{m.profiles?.discord_username ?? "unknown"}</div>
@@ -139,7 +146,7 @@ export function MembersView({ client, group, currentUserId }: { client: Supabase
                     <option value="viewer">viewer</option>
                   </select>
                 ) : (
-                  <span className="badge badge-priority-2">{m.role}</span>
+                  <span className={`role-badge role-${m.role}`}>{m.role}</span>
                 )}
                 {isAdmin && m.supabase_user_id !== currentUserId && (
                   <button className="btn-icon" aria-label="削除" onClick={() => window.confirm("このメンバーを削除しますか？") && removeMember.mutate(m.id)}>

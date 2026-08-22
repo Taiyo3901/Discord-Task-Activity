@@ -26,9 +26,9 @@ Deno.serve(async (req) => {
 
   const clientId = Deno.env.get("DISCORD_CLIENT_ID");
   const clientSecret = Deno.env.get("DISCORD_CLIENT_SECRET");
-  const jwtSecret = Deno.env.get("SUPABASE_JWT_SECRET");
+  const jwtSecret = Deno.env.get("APP_JWT_SECRET");
   if (!clientId || !clientSecret || !jwtSecret) {
-    return json({ error: "サーバー設定が不足しています（DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET / SUPABASE_JWT_SECRET）。" }, 500);
+    return json({ error: "サーバー設定が不足しています（DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET / APP_JWT_SECRET）。" }, 500);
   }
 
   let code: string | undefined;

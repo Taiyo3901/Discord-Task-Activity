@@ -6,9 +6,9 @@ export function Column({ status, label, count, children }: { status: TaskStatus;
   const { setNodeRef, isOver } = useDroppable({ id: status });
 
   return (
-    <section ref={setNodeRef} className={`board-column ${isOver ? "drag-over" : ""}`}>
+    <section ref={setNodeRef} className={`board-column ${isOver ? "drag-over" : ""}`} data-status={status}>
       <header className="board-column-header">
-        <span>{label}</span>
+        <span className="board-column-title">{label}</span>
         <span className="board-column-count">{count}</span>
       </header>
       <div className="board-column-list">{children}</div>

@@ -59,9 +59,15 @@ export function AppShell({ session, onSignOut }: { session: AppSession; onSignOu
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="sidebar-brand">Task Activity</div>
+        <div className="sidebar-brand">
+          <span className="brand-mark">
+            <LayoutGrid size={15} />
+          </span>
+          Task Activity
+        </div>
 
         <div className="group-switcher">
+          <span className="sidebar-label">グループ</span>
           <select value={currentGroup?.id ?? ""} onChange={(e) => setCurrentGroupId(e.target.value)}>
             <option value="" disabled>
               グループを選択
@@ -104,7 +110,10 @@ export function AppShell({ session, onSignOut }: { session: AppSession; onSignOu
 
       <div className="main">
         <header className="topbar">
-          <h1>{currentGroup?.name ?? "グループ未選択"}</h1>
+          <div>
+            <h1>{currentGroup?.name ?? "グループ未選択"}</h1>
+            <p className="topbar-subtitle">{TABS.find((t) => t.id === tab)?.label}</p>
+          </div>
         </header>
 
         <div className="view-body">

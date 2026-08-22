@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { LayoutGrid } from "lucide-react";
 import type { AppSession } from "../types";
 import { browserAuthClient } from "../lib/supabase";
 import { syncCurrentUserProfile, getMyProfile } from "../lib/profile";
@@ -101,6 +102,9 @@ export function DiscordActivityGate() {
     return (
       <main className="login-screen">
         <section className="login-card">
+          <span className="brand-mark">
+            <LayoutGrid size={20} />
+          </span>
           <h1>Discord Task Activity</h1>
           {errorMessage && <div className="auth-error">{errorMessage}</div>}
           <button className="btn btn-primary" onClick={() => window.location.reload()}>
@@ -115,6 +119,9 @@ export function DiscordActivityGate() {
     return (
       <main className="login-screen">
         <section className="login-card">
+          <span className="brand-mark">
+            <LayoutGrid size={20} />
+          </span>
           <h1>Discord Task Activity</h1>
           <p>Discordアカウントでログインし、タスク・予定・メモ・ファイルを共同管理します。</p>
           {errorMessage && <div className="auth-error">{errorMessage}</div>}

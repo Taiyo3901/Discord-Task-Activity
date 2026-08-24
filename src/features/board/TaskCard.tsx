@@ -1,5 +1,5 @@
 import { useDraggable } from "@dnd-kit/core";
-import { Link2, Paperclip } from "lucide-react";
+import { Link2, Paperclip, Users } from "lucide-react";
 import type { TaskSummary } from "../../types";
 import { Avatar } from "../../components/ui/Avatar";
 
@@ -52,7 +52,13 @@ export function TaskCard({ task, onOpen }: { task: TaskSummary; onOpen: () => vo
             </span>
           )}
         </div>
-        {task.assigned_to && <Avatar name={task.assignee_display_name} url={task.assignee_avatar_url} />}
+        {task.assigned_to_all ? (
+          <span className="avatar avatar-all" title="全員">
+            <Users size={12} />
+          </span>
+        ) : (
+          task.assigned_to && <Avatar name={task.assignee_display_name} url={task.assignee_avatar_url} />
+        )}
       </div>
     </button>
   );

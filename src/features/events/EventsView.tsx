@@ -6,6 +6,7 @@ import type { EventItem, Group, TaskSummary } from "../../types";
 import { useToast } from "../../components/ui/ToastProvider";
 import { useRealtimeInvalidate } from "../../hooks/useRealtimeInvalidate";
 import { REMINDER_OPTIONS } from "../../lib/reminders";
+import { TaskModal } from "../tasks/TaskModal";
 
 const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 const POPUP_WIDTH = 340;
@@ -71,13 +72,26 @@ type EventFormState = { title: string; startTime: string; endTime: string; descr
 const EMPTY_FORM: EventFormState = { title: "", startTime: "10:00", endTime: "", description: "", reminderMinutes: null };
 type CalendarTask = Pick<TaskSummary, "id" | "title" | "description" | "status" | "priority" | "due_date" | "due_time">;
 
-export function EventsView({ client, group, currentUserId }: { client: SupabaseClient; group: Group; currentUserId: string }) {
+export function EventsView({
+  client,
+  group,
+  currentUserId,
+  displayName,
+  avatarUrl,
+}: {
+  client: SupabaseClient;
+  group: Group;
+  currentUserId: string;
+  displayName: string;
+  avatarUrl: string | null;
+}) {
   const queryClient = useQueryClient();
   const toast = useToast();
 
   const today = new Date();
   const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [popupPos, setPopupPos] = useState<{ top: number; left: number } | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -490,7 +504,7 @@ export function EventsView({ client, group, currentUserId }: { client: SupabaseC
                 <h4>期限タスク</h4>
                 <div className="day-panel-list">
                   {selectedTasks.map((task) => (
-                    <article className="day-task-card" key={task.id} data-priority={task.priority}>
+                    <button className="day-task-card" key={task.id} data-priority={task.priority} onClick={() => setOpenTaskId(task.id)}>
                       {task.status === "done" ? <CheckSquare size={15} /> : <Square size={15} />}
                       <div className="day-event-main">
                         <div className="day-event-top">
@@ -499,14 +513,25 @@ export function EventsView({ client, group, currentUserId }: { client: SupabaseC
                         </div>
                         {task.description && <p className="day-event-desc">{task.description}</p>}
                       </div>
-                    </article>
+                    </button>
                   ))}
                 </div>
-                <p className="field-hint">タスクの編集はボードから行えます。</p>
               </div>
             )}
           </div>
         </>
+      )}
+
+      {openTaskId && (
+        <TaskModal
+          client={client}
+          group={group}
+          taskId={openTaskId}
+          currentUserId={currentUserId}
+          displayName={displayName}
+          avatarUrl={avatarUrl}
+          onClose={() => setOpenTaskId(null)}
+        />
       )}
     </div>
   );

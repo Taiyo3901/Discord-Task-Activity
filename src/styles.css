@@ -675,6 +675,10 @@ a {
   height: 40px;
   font-size: 15px;
 }
+.avatar-all {
+  background: var(--bg-hover);
+  color: var(--text-muted);
+}
 
 .save-state {
   border-radius: 999px;
@@ -856,6 +860,10 @@ a {
   flex: 1;
   min-height: 260px;
   padding-left: 46px;
+  transition: padding-left 0.12s ease;
+}
+.editor-large.no-badge {
+  padding-left: 14px;
 }
 
 .modal-sidebar {
@@ -945,6 +953,7 @@ a {
 
 .toolbar-row {
   display: flex;
+  align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-4);
   flex-wrap: wrap;
@@ -956,6 +965,11 @@ a {
 .toolbar-row input[type="text"],
 .toolbar-row input[type="url"] {
   flex: 1;
+}
+
+.invite-preview-empty {
+  background: var(--bg-inset);
+  border: 1px dashed var(--border-strong);
 }
 
 .list {
@@ -1416,12 +1430,18 @@ a {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  width: 100%;
+  text-align: left;
   background: var(--bg-inset);
   border: 1px solid var(--border);
   border-left: 3px solid var(--text-faint);
   border-radius: var(--radius-md);
   padding: 10px 12px;
   color: var(--text-faint);
+  transition: border-color 0.12s ease;
+}
+.day-task-card:hover {
+  border-color: var(--border-strong);
 }
 .day-task-card[data-priority="1"] {
   border-left-color: var(--text-faint);

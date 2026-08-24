@@ -40,6 +40,7 @@ export type Task = {
   due_date: string | null;
   due_time: string | null;
   assigned_to: string | null;
+  assigned_to_all: boolean;
   reminder_minutes: number | null;
   created_by: string;
   updated_by: string | null;

@@ -88,7 +88,10 @@ export function TaskModal({
   const updateTask = useMutation({
     mutationFn: async (
       patch: Partial<
-        Pick<Task, "title" | "description" | "status" | "priority" | "due_date" | "due_time" | "assigned_to" | "notified_at" | "reminder_minutes">
+        Pick<
+          Task,
+          "title" | "description" | "status" | "priority" | "due_date" | "due_time" | "assigned_to" | "assigned_to_all" | "notified_at" | "reminder_minutes"
+        >
       >,
     ) => {
       const { error } = await client.from("tasks").update({ ...patch, updated_by: currentUserId }).eq("id", taskId);
@@ -301,7 +304,7 @@ export function TaskModal({
           )}
 
           <div className="editor-wrap">
-            {page && (
+            {page && draft.length > 0 && (
               <span
                 className="editor-author-badge"
                 title={`${editorQuery.data?.display_name ?? "メンバー"}が${relativeTime(page.updated_at)}に更新`}
@@ -310,7 +313,7 @@ export function TaskModal({
               </span>
             )}
             <textarea
-              className="editor editor-large"
+              className={`editor editor-large ${draft.length > 0 ? "" : "no-badge"}`}
               value={draft}
               onChange={(e) => onChangeDraft(e.target.value)}
               placeholder="詳細、メモ、仕様を書いてください。"
@@ -346,7 +349,6 @@ export function TaskModal({
               <input type="date" value={task.due_date ?? ""} onChange={(e) => updateDue({ due_date: e.target.value || null })} />
               <input type="time" value={task.due_time ?? ""} onChange={(e) => updateDue({ due_time: e.target.value || null })} disabled={!task.due_date} />
             </div>
-            <p className="field-hint">時刻は任意です。空欄なら終日扱いになります。</p>
           </div>
 
           <div className="field">
@@ -362,13 +364,20 @@ export function TaskModal({
                 </option>
               ))}
             </select>
-            <p className="field-hint">このタスクだけ、期限に対するリマインドのタイミングを個別に変更できます。</p>
           </div>
 
           <div className="field">
             <label>担当者</label>
-            <select value={task.assigned_to ?? ""} onChange={(e) => updateTask.mutate({ assigned_to: e.target.value || null })}>
+            <select
+              value={task.assigned_to_all ? "all" : task.assigned_to ?? ""}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === "all") updateTask.mutate({ assigned_to: null, assigned_to_all: true });
+                else updateTask.mutate({ assigned_to: value || null, assigned_to_all: false });
+              }}
+            >
               <option value="">未割り当て</option>
+              <option value="all">全員</option>
               {(membersQuery.data ?? []).map((m) => (
                 <option key={m.supabase_user_id} value={m.supabase_user_id}>
                   {m.profiles?.display_name ?? "メンバー"}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Trash2, XCircle } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import type { Group, Role } from "../../types";
 import { useToast } from "../../components/ui/ToastProvider";
 import { Avatar } from "../../components/ui/Avatar";
@@ -12,7 +12,17 @@ type Member = {
   role: Role;
   profiles: { display_name: string | null; discord_username: string | null; avatar_url: string | null } | null;
 };
-type Invite = { id: string; discord_user_id: string; role: Role; status: string };
+type LookupResult = { display_name: string | null; avatar_url: string | null; discord_username: string | null };
+
+function isSnowflake(id: string) {
+  return /^\d{15,25}$/.test(id);
+}
+
+/** まだ一度もログインしていない相手はprofilesに行が無いため、Discordのデフォルトアイコンを算出してフォールバックする。 */
+function defaultDiscordAvatar(id: string): string {
+  const index = Number((BigInt(id) >> 22n) % 6n);
+  return `https://cdn.discordapp.com/embed/avatars/${index}.png`;
+}
 
 export function MembersView({ client, group, currentUserId }: { client: SupabaseClient; group: Group; currentUserId: string }) {
   const queryClient = useQueryClient();
@@ -22,6 +32,7 @@ export function MembersView({ client, group, currentUserId }: { client: Supabase
 
   const membersKey = ["members", group.id];
   const invitesKey = ["invites", group.id];
+  const trimmedId = discordId.trim();
 
   const membersQuery = useQuery({
     queryKey: membersKey,
@@ -36,13 +47,14 @@ export function MembersView({ client, group, currentUserId }: { client: Supabase
     },
   });
 
-  const invitesQuery = useQuery({
-    queryKey: invitesKey,
+  const lookupQuery = useQuery({
+    queryKey: ["invite-lookup", trimmedId],
     queryFn: async () => {
-      const { data, error } = await client.from("invites").select("id,discord_user_id,role,status").eq("group_id", group.id).order("created_at", { ascending: false });
+      const { data, error } = await client.rpc("lookup_profile_by_discord_id", { discord_id: trimmedId });
       if (error) throw error;
-      return (data ?? []) as Invite[];
+      return (Array.isArray(data) ? data[0] : data) as LookupResult | null;
     },
+    enabled: isSnowflake(trimmedId),
   });
 
   const members = membersQuery.data ?? [];
@@ -53,7 +65,7 @@ export function MembersView({ client, group, currentUserId }: { client: Supabase
     mutationFn: async () => {
       const { error } = await client.from("invites").insert({
         group_id: group.id,
-        discord_user_id: discordId.trim(),
+        discord_user_id: trimmedId,
         role,
         status: "pending",
         invited_by: currentUserId,
@@ -66,15 +78,6 @@ export function MembersView({ client, group, currentUserId }: { client: Supabase
       void queryClient.invalidateQueries({ queryKey: invitesKey });
     },
     onError: (error) => toast(error instanceof Error ? error.message : "招待に失敗しました。", "error"),
-  });
-
-  const cancelInvite = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await client.from("invites").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: invitesKey }),
-    onError: (error) => toast(error instanceof Error ? error.message : "取消に失敗しました。", "error"),
   });
 
   const changeRole = useMutation({
@@ -113,13 +116,21 @@ export function MembersView({ client, group, currentUserId }: { client: Supabase
 
       {isAdmin && (
         <div className="toolbar-row">
+          {isSnowflake(trimmedId) ? (
+            <Avatar
+              name={lookupQuery.data?.display_name ?? lookupQuery.data?.discord_username ?? "?"}
+              url={lookupQuery.data?.avatar_url ?? defaultDiscordAvatar(trimmedId)}
+            />
+          ) : (
+            <span className="avatar invite-preview-empty" />
+          )}
           <input value={discordId} onChange={(e) => setDiscordId(e.target.value)} placeholder="Discord User ID" />
           <select value={role} onChange={(e) => setRole(e.target.value as Role)}>
             <option value="admin">admin</option>
             <option value="member">member</option>
             <option value="viewer">viewer</option>
           </select>
-          <button className="btn btn-primary" disabled={!discordId.trim()} onClick={() => invite.mutate()}>
+          <button className="btn btn-primary" disabled={!trimmedId} onClick={() => invite.mutate()}>
             招待
           </button>
         </div>
@@ -158,31 +169,6 @@ export function MembersView({ client, group, currentUserId }: { client: Supabase
           ))}
         </div>
       </div>
-
-      {isAdmin && (
-        <div className="panel-section">
-          <h3>招待履歴</h3>
-          <div className="list">
-            {(invitesQuery.data ?? []).map((i) => (
-              <article className="list-card" key={i.id}>
-                <div className="list-card-main">
-                  <div>
-                    <div className="list-card-title monospace">{i.discord_user_id}</div>
-                    <div className="list-card-sub">
-                      {i.role} / {i.status}
-                    </div>
-                  </div>
-                </div>
-                {i.status === "pending" && (
-                  <button className="btn-icon" aria-label="招待を取消" onClick={() => cancelInvite.mutate(i.id)}>
-                    <XCircle size={14} />
-                  </button>
-                )}
-              </article>
-            ))}
-          </div>
-        </div>
-      )}
 
       <div className="panel-section">
         <button className="btn btn-danger" onClick={() => window.confirm("このグループから脱退しますか？") && leaveGroup.mutate()}>

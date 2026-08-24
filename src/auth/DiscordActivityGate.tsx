@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { LayoutGrid } from "lucide-react";
 import type { AppSession } from "../types";
 import { browserAuthClient } from "../lib/supabase";
-import { syncCurrentUserProfile, getMyProfile } from "../lib/profile";
+import { syncCurrentUserProfile, getMyProfile, acceptPendingInvites } from "../lib/profile";
 import { initDiscordActivity } from "../lib/discordActivity";
 import { establishDiscordActivitySession } from "../lib/discordSession";
 import { AppShell } from "../app/AppShell";
@@ -27,6 +27,7 @@ export function DiscordActivityGate() {
     if (sdk) {
       try {
         const activitySession = await establishDiscordActivitySession(sdk);
+        await acceptPendingInvites(activitySession.client).catch(() => {});
         setSession(activitySession);
         setStatus("ready");
       } catch (error) {
@@ -63,6 +64,7 @@ export function DiscordActivityGate() {
 
     try {
       await syncCurrentUserProfile(data.user);
+      await acceptPendingInvites(browserAuthClient).catch(() => {});
       const profile = await getMyProfile(browserAuthClient, data.user.id);
       setSession({
         client: browserAuthClient,

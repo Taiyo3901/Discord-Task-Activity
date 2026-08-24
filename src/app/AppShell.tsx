@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { LayoutGrid, CalendarDays, Users, Settings, UserCircle, LogOut } from "lucide-react";
+import { LayoutGrid, CalendarDays, Users, Settings, UserCircle, LogOut, Plus } from "lucide-react";
 import type { AppSession, Group } from "../types";
 import { Avatar } from "../components/ui/Avatar";
 import { useToast } from "../components/ui/ToastProvider";
@@ -27,6 +27,7 @@ export function AppShell({ session, onSignOut }: { session: AppSession; onSignOu
   const [tab, setTab] = useState<Tab>("board");
   const [currentGroupId, setCurrentGroupId] = useState<string | null>(null);
   const [newGroupName, setNewGroupName] = useState("");
+  const [mobileNewGroupOpen, setMobileNewGroupOpen] = useState(false);
 
   const groupsQuery = useQuery({
     queryKey: ["groups", userId],
@@ -50,6 +51,7 @@ export function AppShell({ session, onSignOut }: { session: AppSession; onSignOu
     },
     onSuccess: (id) => {
       setNewGroupName("");
+      setMobileNewGroupOpen(false);
       setCurrentGroupId(id);
       void queryClient.invalidateQueries({ queryKey: ["groups", userId] });
     },
@@ -114,6 +116,46 @@ export function AppShell({ session, onSignOut }: { session: AppSession; onSignOu
             <h1>{currentGroup?.name ?? "グループ未選択"}</h1>
             <p className="topbar-subtitle">{TABS.find((t) => t.id === tab)?.label}</p>
           </div>
+
+          <div className="topbar-mobile-groups">
+            <select
+              className="mobile-group-select"
+              value={currentGroup?.id ?? ""}
+              onChange={(e) => setCurrentGroupId(e.target.value)}
+            >
+              <option value="" disabled>
+                グループを選択
+              </option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+            <button
+              className="btn-icon"
+              aria-label="新しいグループを作成"
+              onClick={() => setMobileNewGroupOpen((v) => !v)}
+            >
+              <Plus size={16} />
+            </button>
+            <button className="btn-icon" onClick={onSignOut} aria-label="ログアウト" title="ログアウト">
+              <LogOut size={16} />
+            </button>
+          </div>
+
+          {mobileNewGroupOpen && (
+            <div className="topbar-mobile-new-group">
+              <input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="新しいグループ名" />
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={!newGroupName.trim() || createGroup.isPending}
+                onClick={() => void createGroup.mutate(newGroupName.trim())}
+              >
+                作成
+              </button>
+            </div>
+          )}
         </header>
 
         <div className="view-body">
@@ -121,7 +163,7 @@ export function AppShell({ session, onSignOut }: { session: AppSession; onSignOu
             <AccountView session={session} />
           ) : !currentGroup ? (
             <div className="empty-state">
-              <p>グループがありません。左のサイドバーから新しいグループを作成してください。</p>
+              <p>グループがありません。新しいグループを作成してください。</p>
             </div>
           ) : (
             <>
@@ -133,6 +175,15 @@ export function AppShell({ session, onSignOut }: { session: AppSession; onSignOu
           )}
         </div>
       </div>
+
+      <nav className="mobile-tabbar">
+        {TABS.map(({ id, label, icon: Icon }) => (
+          <button key={id} className={`mobile-tab-item ${tab === id ? "active" : ""}`} onClick={() => setTab(id)}>
+            <Icon size={20} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

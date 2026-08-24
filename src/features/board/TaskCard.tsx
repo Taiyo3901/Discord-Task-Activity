@@ -1,5 +1,5 @@
 import { useDraggable } from "@dnd-kit/core";
-import { MessageSquare, Link2, Paperclip } from "lucide-react";
+import { Link2, Paperclip } from "lucide-react";
 import type { TaskSummary } from "../../types";
 import { Avatar } from "../../components/ui/Avatar";
 
@@ -13,6 +13,10 @@ function dueState(dueDate: string | null): "overdue" | "soon" | null {
   soonThreshold.setDate(soonThreshold.getDate() + 2);
   if (dueDate <= soonThreshold.toISOString().slice(0, 10)) return "soon";
   return null;
+}
+
+function dueLabel(dueDate: string, dueTime: string | null): string {
+  return dueTime ? `${dueDate} ${dueTime.slice(0, 5)}` : dueDate;
 }
 
 export function TaskCard({ task, onOpen }: { task: TaskSummary; onOpen: () => void }) {
@@ -33,15 +37,10 @@ export function TaskCard({ task, onOpen }: { task: TaskSummary; onOpen: () => vo
       <span className="task-card-title">{task.title}</span>
       <div className="task-card-meta">
         <span className={`badge badge-priority-${task.priority}`}>{PRIORITY_LABEL[task.priority] ?? task.priority}</span>
-        {task.due_date && <span className={`due-pill ${due ?? ""}`}>{task.due_date}</span>}
+        {task.due_date && <span className={`due-pill ${due ?? ""}`}>{dueLabel(task.due_date, task.due_time)}</span>}
       </div>
       <div className="task-card-footer">
         <div className="task-card-stats">
-          {task.comment_count > 0 && (
-            <span>
-              <MessageSquare size={12} /> {task.comment_count}
-            </span>
-          )}
           {task.link_count > 0 && (
             <span>
               <Link2 size={12} /> {task.link_count}

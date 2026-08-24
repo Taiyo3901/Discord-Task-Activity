@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
-import type { EventItem, Group } from "../../types";
+import { CalendarDays, CheckSquare, ChevronLeft, ChevronRight, Pencil, Plus, Square, Trash2 } from "lucide-react";
+import type { EventItem, Group, TaskSummary } from "../../types";
 import { useToast } from "../../components/ui/ToastProvider";
 import { useRealtimeInvalidate } from "../../hooks/useRealtimeInvalidate";
 
@@ -68,6 +68,7 @@ function computePopupPosition(rect: DOMRect) {
 
 type EventFormState = { title: string; startTime: string; endTime: string; description: string };
 const EMPTY_FORM: EventFormState = { title: "", startTime: "10:00", endTime: "", description: "" };
+type CalendarTask = Pick<TaskSummary, "id" | "title" | "description" | "status" | "priority" | "due_date" | "due_time">;
 
 export function EventsView({ client, group, currentUserId }: { client: SupabaseClient; group: Group; currentUserId: string }) {
   const queryClient = useQueryClient();
@@ -97,6 +98,24 @@ export function EventsView({ client, group, currentUserId }: { client: SupabaseC
 
   const events = query.data ?? [];
 
+  const tasksQueryKey = ["calendar-tasks", group.id];
+  const tasksQuery = useQuery({
+    queryKey: tasksQueryKey,
+    queryFn: async () => {
+      const { data, error } = await client
+        .from("task_summary")
+        .select("id,title,description,status,priority,due_date,due_time")
+        .eq("group_id", group.id)
+        .not("due_date", "is", null)
+        .order("due_date");
+      if (error) throw error;
+      return (data ?? []) as CalendarTask[];
+    },
+  });
+  useRealtimeInvalidate(client, `calendar-tasks-${group.id}`, "tasks", `group_id=eq.${group.id}`, tasksQueryKey);
+
+  const dueTasks = tasksQuery.data ?? [];
+
   const eventsByDay = useMemo(() => {
     const map = new Map<string, EventItem[]>();
     for (const event of events) {
@@ -109,8 +128,21 @@ export function EventsView({ client, group, currentUserId }: { client: SupabaseC
     return map;
   }, [events]);
 
+  const tasksByDay = useMemo(() => {
+    const map = new Map<string, CalendarTask[]>();
+    for (const task of dueTasks) {
+      if (!task.due_date) continue;
+      const list = map.get(task.due_date) ?? [];
+      list.push(task);
+      map.set(task.due_date, list);
+    }
+    for (const list of map.values()) list.sort((a, b) => (a.due_time ?? "").localeCompare(b.due_time ?? ""));
+    return map;
+  }, [dueTasks]);
+
   const grid = useMemo(() => buildMonthGrid(cursor.getFullYear(), cursor.getMonth()), [cursor]);
   const selectedEvents = selectedDate ? eventsByDay.get(dateKey(selectedDate)) ?? [] : [];
+  const selectedTasks = selectedDate ? tasksByDay.get(dateKey(selectedDate)) ?? [] : [];
 
   function goToMonth(delta: number) {
     setCursor((c) => new Date(c.getFullYear(), c.getMonth() + delta, 1));
@@ -239,9 +271,11 @@ export function EventsView({ client, group, currentUserId }: { client: SupabaseC
             const isToday = sameDay(date, today);
             const isSelected = selectedDate ? sameDay(date, selectedDate) : false;
             const dayEvents = eventsByDay.get(key) ?? [];
+            const dayTasks = tasksByDay.get(key) ?? [];
             const weekday = date.getDay();
-            const visible = dayEvents.slice(0, 3);
-            const hidden = dayEvents.length - visible.length;
+            const visibleEvents = dayEvents.slice(0, 3);
+            const visibleTasks = dayTasks.slice(0, Math.max(0, 3 - visibleEvents.length));
+            const hidden = dayEvents.length + dayTasks.length - visibleEvents.length - visibleTasks.length;
 
             return (
               <button
@@ -251,14 +285,19 @@ export function EventsView({ client, group, currentUserId }: { client: SupabaseC
               >
                 <span className={`calendar-date ${weekday === 0 ? "sun" : ""} ${weekday === 6 ? "sat" : ""}`}>{date.getDate()}</span>
                 <span className="calendar-events">
-                  {visible.map((event) => (
-                    <span key={event.id} className="calendar-event-pill">
+                  {visibleEvents.map((event) => (
+                    <span key={`e-${event.id}`} className="calendar-event-pill">
                       <span className="calendar-event-title">{event.title}</span>
+                    </span>
+                  ))}
+                  {visibleTasks.map((task) => (
+                    <span key={`t-${task.id}`} className="calendar-task-pill" data-priority={task.priority}>
+                      <span className={`calendar-event-title ${task.status === "done" ? "done" : ""}`}>{task.title}</span>
                     </span>
                   ))}
                   {hidden > 0 && <span className="calendar-more">+{hidden}件</span>}
                 </span>
-                {dayEvents.length === 0 && (
+                {dayEvents.length === 0 && dayTasks.length === 0 && (
                   <span className="calendar-add-hint">
                     <Plus size={14} />
                   </span>
@@ -276,7 +315,9 @@ export function EventsView({ client, group, currentUserId }: { client: SupabaseC
             <header className="day-panel-header">
               <div>
                 <div className="day-panel-date">{selectedLabel}</div>
-                <div className="day-panel-count">{selectedEvents.length}件の予定</div>
+                <div className="day-panel-count">
+                  {selectedEvents.length}件の予定{selectedTasks.length > 0 && ` ・ ${selectedTasks.length}件の期限タスク`}
+                </div>
               </div>
               <button
                 className="btn btn-primary btn-sm"
@@ -410,6 +451,27 @@ export function EventsView({ client, group, currentUserId }: { client: SupabaseC
                 ),
               )}
             </div>
+
+            {selectedTasks.length > 0 && (
+              <div className="day-panel-tasks">
+                <h4>期限タスク</h4>
+                <div className="day-panel-list">
+                  {selectedTasks.map((task) => (
+                    <article className="day-task-card" key={task.id} data-priority={task.priority}>
+                      {task.status === "done" ? <CheckSquare size={15} /> : <Square size={15} />}
+                      <div className="day-event-main">
+                        <div className="day-event-top">
+                          {task.due_time && <span className="day-event-time">{task.due_time.slice(0, 5)}</span>}
+                          <span className={`day-event-title ${task.status === "done" ? "done" : ""}`}>{task.title}</span>
+                        </div>
+                        {task.description && <p className="day-event-desc">{task.description}</p>}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                <p className="field-hint">タスクの編集はボードから行えます。</p>
+              </div>
+            )}
           </div>
         </>
       )}

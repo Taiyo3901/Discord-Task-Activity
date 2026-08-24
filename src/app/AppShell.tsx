@@ -167,7 +167,9 @@ export function AppShell({ session, onSignOut }: { session: AppSession; onSignOu
             </div>
           ) : (
             <>
-              {tab === "board" && <Board client={client} group={currentGroup} currentUserId={userId} displayName={displayName} />}
+              {tab === "board" && (
+                <Board client={client} group={currentGroup} currentUserId={userId} displayName={displayName} avatarUrl={avatarUrl} />
+              )}
               {tab === "events" && <EventsView client={client} group={currentGroup} currentUserId={userId} />}
               {tab === "members" && <MembersView client={client} group={currentGroup} currentUserId={userId} />}
               {tab === "settings" && <GroupSettingsView client={client} group={currentGroup} currentUserId={userId} />}

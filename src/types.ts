@@ -24,6 +24,8 @@ export type Group = {
   name: string;
   discord_guild_id: string | null;
   discord_webhook_url: string | null;
+  task_reminder_minutes: number;
+  event_reminder_minutes: number;
   created_by: string;
   created_at: string;
 };
@@ -36,9 +38,11 @@ export type Task = {
   status: TaskStatus;
   priority: number;
   due_date: string | null;
+  due_time: string | null;
   assigned_to: string | null;
   created_by: string;
   updated_by: string | null;
+  notified_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -46,7 +50,6 @@ export type Task = {
 export type TaskSummary = Task & {
   assignee_display_name: string | null;
   assignee_avatar_url: string | null;
-  comment_count: number;
   link_count: number;
   attachment_count: number;
 };
@@ -78,6 +81,7 @@ export type EventItem = {
 export type PresencePayload = {
   user_id: string;
   display_name: string;
+  avatar_url: string | null;
   status: "viewing" | "editing";
   field: string | null;
   updated_at: string;

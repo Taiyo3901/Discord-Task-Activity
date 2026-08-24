@@ -32,7 +32,7 @@ Discord Activity外（`npm run dev`でのローカル確認など）では、従
 
 ## 同期方式
 
-- タスク、予定、コメント、リンク、添付メタ情報はPostgres Changesで反映（`useRealtimeInvalidate`がReact Queryのキャッシュを無効化）。
+- タスク、予定、リンク、添付メタ情報はPostgres Changesで反映（`useRealtimeInvalidate`がReact Queryのキャッシュを無効化）。
 - 閲覧中、入力中はPresenceで共有。
 - タスク本文は最後の入力から3秒後に保存。
 - `task_pages.version` を条件付き更新し、同時保存を検知（競合時はモーダル内で「最新版を見る/自分の内容で上書き」を選択）。
@@ -41,7 +41,7 @@ Discord Activity外（`npm run dev`でのローカル確認など）では、従
 
 - owner: 全管理
 - admin: 招待、メンバー管理、編集、グループ設定
-- member: 通常編集（タスク・予定・コメント・リンク・添付の作成/更新/削除）
+- member: 通常編集（タスク・予定・リンク・添付の作成/更新/削除）
 - viewer: 読み取り専用（`is_group_editor()`を書き込み系RLSポリシーで使うことで強制）
 
 `profiles`テーブルは自分自身、または同じグループに所属する相手のみ閲覧可能。

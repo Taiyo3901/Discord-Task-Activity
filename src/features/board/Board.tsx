@@ -22,11 +22,13 @@ export function Board({
   group,
   currentUserId,
   displayName,
+  avatarUrl,
 }: {
   client: SupabaseClient;
   group: Group;
   currentUserId: string;
   displayName: string;
+  avatarUrl: string | null;
 }) {
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -109,6 +111,7 @@ export function Board({
           taskId={selectedTaskId}
           currentUserId={currentUserId}
           displayName={displayName}
+          avatarUrl={avatarUrl}
           onClose={() => setSelectedTaskId(null)}
         />
       )}

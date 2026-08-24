@@ -4,15 +4,28 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2, X } from "lucide-react";
 import type { Group, PresencePayload, Task, TaskPage, TaskStatus } from "../../types";
 import { Modal } from "../../components/ui/Modal";
+import { Avatar } from "../../components/ui/Avatar";
 import { useToast } from "../../components/ui/ToastProvider";
 import { LinksPanel } from "./LinksPanel";
-import { CommentsPanel } from "./CommentsPanel";
 import { AttachmentsPanel } from "./AttachmentsPanel";
 
 const STATUS_LABEL: Record<TaskStatus, string> = { todo: "未着手", doing: "進行中", review: "確認待ち", done: "完了" };
 const SAVE_LABEL: Record<string, string> = { saved: "保存済み", editing: "編集中", saving: "保存中", conflict: "競合あり" };
 
 type Member = { supabase_user_id: string; profiles: { display_name: string | null } | null };
+type EditorProfile = { display_name: string | null; avatar_url: string | null };
+
+function relativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "たった今";
+  if (minutes < 60) return `${minutes}分前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}時間前`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}日前`;
+  return new Date(iso).toLocaleDateString("ja-JP");
+}
 
 export function TaskModal({
   client,
@@ -20,6 +33,7 @@ export function TaskModal({
   taskId,
   currentUserId,
   displayName,
+  avatarUrl,
   onClose,
 }: {
   client: SupabaseClient;
@@ -27,6 +41,7 @@ export function TaskModal({
   taskId: string;
   currentUserId: string;
   displayName: string;
+  avatarUrl: string | null;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -56,9 +71,13 @@ export function TaskModal({
 
   const task = taskQuery.data;
   const [titleDraft, setTitleDraft] = useState("");
+  const [descriptionDraft, setDescriptionDraft] = useState("");
   useEffect(() => {
-    if (task) setTitleDraft(task.title);
-  }, [task?.id, task?.title]);
+    if (task) {
+      setTitleDraft(task.title);
+      setDescriptionDraft(task.description ?? "");
+    }
+  }, [task?.id, task?.title, task?.description]);
 
   const invalidateTask = () => {
     void queryClient.invalidateQueries({ queryKey: ["task", taskId] });
@@ -66,13 +85,20 @@ export function TaskModal({
   };
 
   const updateTask = useMutation({
-    mutationFn: async (patch: Partial<Pick<Task, "title" | "status" | "priority" | "due_date" | "assigned_to">>) => {
+    mutationFn: async (
+      patch: Partial<Pick<Task, "title" | "description" | "status" | "priority" | "due_date" | "due_time" | "assigned_to" | "notified_at">>,
+    ) => {
       const { error } = await client.from("tasks").update({ ...patch, updated_by: currentUserId }).eq("id", taskId);
       if (error) throw error;
     },
     onSuccess: invalidateTask,
     onError: (error) => toast(error instanceof Error ? error.message : "更新に失敗しました。", "error"),
   });
+
+  /** 期限を変更したら、そのタイミングでリマインド通知が再度飛ぶよう notified_at をリセットする。 */
+  function updateDue(patch: { due_date?: string | null; due_time?: string | null }) {
+    updateTask.mutate({ ...patch, notified_at: null });
+  }
 
   const deleteTask = useMutation({
     mutationFn: async () => {
@@ -95,6 +121,15 @@ export function TaskModal({
   const timerRef = useRef<number | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  const editorQuery = useQuery({
+    queryKey: ["task-page-editor", page?.updated_by],
+    queryFn: async () => {
+      const { data } = await client.from("profiles").select("display_name,avatar_url").eq("id", page!.updated_by!).maybeSingle();
+      return data as EditorProfile | null;
+    },
+    enabled: !!page?.updated_by,
+  });
 
   useEffect(() => {
     void loadPage();
@@ -143,6 +178,7 @@ export function TaskModal({
     await channelRef.current?.track({
       user_id: currentUserId,
       display_name: displayName,
+      avatar_url: avatarUrl,
       status,
       field: status === "editing" ? "content" : null,
       updated_at: new Date().toISOString(),
@@ -234,8 +270,52 @@ export function TaskModal({
         </div>
       </header>
 
-      <div className="modal-body">
-        <div className="field-grid">
+      <div className="modal-layout">
+        <div className="modal-main">
+          <div className="editor-meta-row">
+            {page && (
+              <span className="editor-attribution">
+                <Avatar name={editorQuery.data?.display_name ?? "?"} url={editorQuery.data?.avatar_url} />
+                <span>
+                  {editorQuery.data?.display_name ?? "メンバー"}が{relativeTime(page.updated_at)}に更新
+                </span>
+              </span>
+            )}
+            {presence.length > 0 && (
+              <div className="presence-box">
+                {presence.map((p, i) => (
+                  <span key={`${p.user_id}-${i}`} className="presence-chip">
+                    <Avatar name={p.display_name} url={p.avatar_url} />
+                    {p.display_name}が{p.status === "editing" ? "入力中" : "閲覧中"}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {state === "conflict" && (
+            <div className="conflict-box">
+              <p>他のメンバーが先に更新しました。編集中の内容は保持されています。</p>
+              <div className="actions">
+                <button className="btn btn-ghost" onClick={() => void reloadLatest()}>
+                  最新版を見る
+                </button>
+                <button className="btn btn-primary" onClick={() => void overwrite()}>
+                  自分の内容で上書き
+                </button>
+              </div>
+            </div>
+          )}
+
+          <textarea
+            className="editor editor-large"
+            value={draft}
+            onChange={(e) => onChangeDraft(e.target.value)}
+            placeholder="詳細、メモ、仕様を書いてください。"
+          />
+        </div>
+
+        <aside className="modal-sidebar">
           <div className="field">
             <label>ステータス</label>
             <select value={task.status} onChange={(e) => updateTask.mutate({ status: e.target.value as TaskStatus })}>
@@ -246,6 +326,7 @@ export function TaskModal({
               ))}
             </select>
           </div>
+
           <div className="field">
             <label>優先度</label>
             <select value={task.priority} onChange={(e) => updateTask.mutate({ priority: Number(e.target.value) })}>
@@ -255,10 +336,16 @@ export function TaskModal({
               <option value={4}>緊急</option>
             </select>
           </div>
+
           <div className="field">
             <label>期限</label>
-            <input type="date" value={task.due_date ?? ""} onChange={(e) => updateTask.mutate({ due_date: e.target.value || null })} />
+            <div className="due-input-row">
+              <input type="date" value={task.due_date ?? ""} onChange={(e) => updateDue({ due_date: e.target.value || null })} />
+              <input type="time" value={task.due_time ?? ""} onChange={(e) => updateDue({ due_time: e.target.value || null })} disabled={!task.due_date} />
+            </div>
+            <p className="field-hint">時刻は任意です。空欄なら終日扱いになります。</p>
           </div>
+
           <div className="field">
             <label>担当者</label>
             <select value={task.assigned_to ?? ""} onChange={(e) => updateTask.mutate({ assigned_to: e.target.value || null })}>
@@ -270,39 +357,21 @@ export function TaskModal({
               ))}
             </select>
           </div>
-        </div>
 
-        {presence.length > 0 && (
-          <div className="presence-box">
-            {presence.map((p, i) => (
-              <span key={`${p.user_id}-${i}`}>
-                {p.display_name} が{p.status === "editing" ? "入力中" : "閲覧中"}
-              </span>
-            ))}
+          <div className="field">
+            <label>概要（カレンダーにも表示）</label>
+            <textarea
+              className="task-summary-input"
+              value={descriptionDraft}
+              onChange={(e) => setDescriptionDraft(e.target.value)}
+              onBlur={() => descriptionDraft !== (task.description ?? "") && updateTask.mutate({ description: descriptionDraft.trim() || null })}
+              placeholder="一覧やカレンダーに出す短い概要（任意）"
+            />
           </div>
-        )}
 
-        {state === "conflict" && (
-          <div className="conflict-box">
-            <p>他のメンバーが先に更新しました。編集中の内容は保持されています。</p>
-            <div className="actions">
-              <button className="btn btn-ghost" onClick={() => void reloadLatest()}>
-                最新版を見る
-              </button>
-              <button className="btn btn-primary" onClick={() => void overwrite()}>
-                自分の内容で上書き
-              </button>
-            </div>
-          </div>
-        )}
-
-        <textarea className="editor" value={draft} onChange={(e) => onChangeDraft(e.target.value)} placeholder="詳細、メモ、仕様を書いてください。" />
-
-        <div className="detail-grid">
           <LinksPanel client={client} taskId={taskId} userId={currentUserId} />
           <AttachmentsPanel client={client} taskId={taskId} groupId={group.id} userId={currentUserId} />
-          <CommentsPanel client={client} taskId={taskId} userId={currentUserId} />
-        </div>
+        </aside>
       </div>
     </Modal>
   );

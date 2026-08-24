@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
@@ -7,6 +7,8 @@ import { useToast } from "../../components/ui/ToastProvider";
 import { useRealtimeInvalidate } from "../../hooks/useRealtimeInvalidate";
 
 const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
+const POPUP_WIDTH = 340;
+const POPUP_MAX_HEIGHT = 480;
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -17,13 +19,26 @@ function dateKey(d: Date) {
 function sameDay(a: Date, b: Date) {
   return dateKey(a) === dateKey(b);
 }
-function toLocalDateTimeInput(iso: string) {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function combineDateTime(date: Date, time: string): Date {
+  const [h, m] = time ? time.split(":").map(Number) : [0, 0];
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), h || 0, m || 0);
 }
-function toTimeLabel(iso: string) {
+/** 時刻が00:00ぴったりの場合は「時刻未指定」を表す規約として扱う（終日予定など）。 */
+function timeLabel(iso: string | null): string | null {
+  if (!iso) return null;
   const d = new Date(iso);
+  if (d.getHours() === 0 && d.getMinutes() === 0) return null;
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function timeInputValue(iso: string | null): string {
+  return timeLabel(iso) ?? "";
+}
+function eventTimeRangeLabel(event: EventItem): string {
+  const start = timeLabel(event.start_at);
+  const end = timeLabel(event.end_at);
+  if (!start && !end) return "終日";
+  if (start && end) return `${start}〜${end}`;
+  return start ?? `〜${end}`;
 }
 
 /** 週の始まり(日曜)から42マス(6週)分のグリッドを作る。前後月の日で埋める。 */
@@ -37,21 +52,37 @@ function buildMonthGrid(year: number, month: number) {
   });
 }
 
+function computePopupPosition(rect: DOMRect) {
+  let left = rect.left;
+  if (left + POPUP_WIDTH > window.innerWidth - 12) left = window.innerWidth - POPUP_WIDTH - 12;
+  if (left < 12) left = 12;
+
+  let top = rect.bottom + 8;
+  if (top + POPUP_MAX_HEIGHT > window.innerHeight - 12) {
+    top = rect.top - POPUP_MAX_HEIGHT - 8;
+  }
+  if (top < 12) top = 12;
+
+  return { top, left };
+}
+
+type EventFormState = { title: string; startTime: string; endTime: string; description: string };
+const EMPTY_FORM: EventFormState = { title: "", startTime: "10:00", endTime: "", description: "" };
+
 export function EventsView({ client, group, currentUserId }: { client: SupabaseClient; group: Group; currentUserId: string }) {
   const queryClient = useQueryClient();
   const toast = useToast();
 
   const today = new Date();
   const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
-  const [selectedDate, setSelectedDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), today.getDate()));
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [popupPos, setPopupPos] = useState<{ top: number; left: number } | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
-  const [addTitle, setAddTitle] = useState("");
-  const [addTime, setAddTime] = useState("10:00");
+  const [addForm, setAddForm] = useState<EventFormState>(EMPTY_FORM);
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editStartAt, setEditStartAt] = useState("");
+  const [editForm, setEditForm] = useState<EventFormState>(EMPTY_FORM);
 
   const queryKey = ["events", group.id];
   const query = useQuery({
@@ -79,37 +110,57 @@ export function EventsView({ client, group, currentUserId }: { client: SupabaseC
   }, [events]);
 
   const grid = useMemo(() => buildMonthGrid(cursor.getFullYear(), cursor.getMonth()), [cursor]);
-  const selectedEvents = eventsByDay.get(dateKey(selectedDate)) ?? [];
+  const selectedEvents = selectedDate ? eventsByDay.get(dateKey(selectedDate)) ?? [] : [];
 
   function goToMonth(delta: number) {
     setCursor((c) => new Date(c.getFullYear(), c.getMonth() + delta, 1));
   }
   function goToToday() {
-    const now = new Date();
-    setCursor(new Date(now.getFullYear(), now.getMonth(), 1));
-    setSelectedDate(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
+    setCursor(new Date(today.getFullYear(), today.getMonth(), 1));
   }
-  function selectDay(date: Date) {
+
+  function openDayPopup(date: Date, cellEl: HTMLElement) {
     setSelectedDate(date);
+    setPopupPos(computePopupPosition(cellEl.getBoundingClientRect()));
+    setAddOpen(false);
+    setEditingId(null);
+    setAddForm(EMPTY_FORM);
+  }
+  function closePopup() {
+    setSelectedDate(null);
+    setPopupPos(null);
     setAddOpen(false);
     setEditingId(null);
   }
 
+  useEffect(() => {
+    if (!selectedDate) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") closePopup();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate]);
+
   const add = useMutation({
     mutationFn: async () => {
-      const [h, m] = addTime.split(":").map(Number);
-      const startAt = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), h || 0, m || 0);
+      if (!selectedDate) return;
+      const startAt = combineDateTime(selectedDate, addForm.startTime);
+      const endAt = addForm.endTime ? combineDateTime(selectedDate, addForm.endTime) : null;
       const { error } = await client.from("events").insert({
         group_id: group.id,
-        title: addTitle.trim(),
+        title: addForm.title.trim(),
+        description: addForm.description.trim() || null,
         start_at: startAt.toISOString(),
+        end_at: endAt ? endAt.toISOString() : null,
         created_by: currentUserId,
         updated_by: currentUserId,
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      setAddTitle("");
+      setAddForm(EMPTY_FORM);
       setAddOpen(false);
       void queryClient.invalidateQueries({ queryKey });
     },
@@ -118,9 +169,18 @@ export function EventsView({ client, group, currentUserId }: { client: SupabaseC
 
   const update = useMutation({
     mutationFn: async (event: EventItem) => {
+      if (!selectedDate) return;
+      const startAt = combineDateTime(selectedDate, editForm.startTime);
+      const endAt = editForm.endTime ? combineDateTime(selectedDate, editForm.endTime) : null;
       const { error } = await client
         .from("events")
-        .update({ title: editTitle.trim(), start_at: new Date(editStartAt).toISOString(), updated_by: currentUserId })
+        .update({
+          title: editForm.title.trim(),
+          description: editForm.description.trim() || null,
+          start_at: startAt.toISOString(),
+          end_at: endAt ? endAt.toISOString() : null,
+          updated_by: currentUserId,
+        })
         .eq("id", event.id);
       if (error) throw error;
     },
@@ -141,7 +201,7 @@ export function EventsView({ client, group, currentUserId }: { client: SupabaseC
   });
 
   const monthLabel = `${cursor.getFullYear()}年${cursor.getMonth() + 1}月`;
-  const selectedLabel = `${selectedDate.getMonth() + 1}月${selectedDate.getDate()}日（${WEEKDAYS[selectedDate.getDay()]}）`;
+  const selectedLabel = selectedDate ? `${selectedDate.getMonth() + 1}月${selectedDate.getDate()}日（${WEEKDAYS[selectedDate.getDay()]}）` : "";
 
   return (
     <div className="calendar-page">
@@ -177,7 +237,7 @@ export function EventsView({ client, group, currentUserId }: { client: SupabaseC
             const key = dateKey(date);
             const inMonth = date.getMonth() === cursor.getMonth();
             const isToday = sameDay(date, today);
-            const isSelected = sameDay(date, selectedDate);
+            const isSelected = selectedDate ? sameDay(date, selectedDate) : false;
             const dayEvents = eventsByDay.get(key) ?? [];
             const weekday = date.getDay();
             const visible = dayEvents.slice(0, 3);
@@ -187,100 +247,172 @@ export function EventsView({ client, group, currentUserId }: { client: SupabaseC
               <button
                 key={key}
                 className={`calendar-cell ${inMonth ? "" : "outside"} ${isToday ? "today" : ""} ${isSelected ? "selected" : ""}`}
-                onClick={() => selectDay(date)}
+                onClick={(e) => openDayPopup(date, e.currentTarget)}
               >
                 <span className={`calendar-date ${weekday === 0 ? "sun" : ""} ${weekday === 6 ? "sat" : ""}`}>{date.getDate()}</span>
                 <span className="calendar-events">
                   {visible.map((event) => (
                     <span key={event.id} className="calendar-event-pill">
-                      <span className="calendar-event-time">{toTimeLabel(event.start_at)}</span>
                       <span className="calendar-event-title">{event.title}</span>
                     </span>
                   ))}
                   {hidden > 0 && <span className="calendar-more">+{hidden}件</span>}
                 </span>
+                {dayEvents.length === 0 && (
+                  <span className="calendar-add-hint">
+                    <Plus size={14} />
+                  </span>
+                )}
               </button>
             );
           })}
         </div>
       </section>
 
-      <aside className="day-panel">
-        <header className="day-panel-header">
-          <div>
-            <div className="day-panel-date">{selectedLabel}</div>
-            <div className="day-panel-count">{selectedEvents.length}件の予定</div>
-          </div>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={() => {
-              setEditingId(null);
-              setAddOpen((v) => !v);
-            }}
-          >
-            <Plus size={14} />
-            追加
-          </button>
-        </header>
-
-        {addOpen && (
-          <div className="day-panel-form">
-            <input autoFocus value={addTitle} onChange={(e) => setAddTitle(e.target.value)} placeholder="予定名" />
-            <input type="time" value={addTime} onChange={(e) => setAddTime(e.target.value)} />
-            <div className="day-panel-form-actions">
-              <button className="btn btn-primary" disabled={!addTitle.trim() || add.isPending} onClick={() => add.mutate()}>
-                保存
+      {selectedDate && popupPos && (
+        <>
+          <div className="day-popup-backdrop" onMouseDown={closePopup} />
+          <div className="day-popup" style={{ top: popupPos.top, left: popupPos.left }}>
+            <header className="day-panel-header">
+              <div>
+                <div className="day-panel-date">{selectedLabel}</div>
+                <div className="day-panel-count">{selectedEvents.length}件の予定</div>
+              </div>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  setEditingId(null);
+                  setAddOpen((v) => !v);
+                  setAddForm(EMPTY_FORM);
+                }}
+              >
+                <Plus size={14} />
+                追加
               </button>
-              <button className="btn btn-ghost" onClick={() => setAddOpen(false)}>
-                キャンセル
-              </button>
-            </div>
-          </div>
-        )}
+            </header>
 
-        <div className="day-panel-list">
-          {selectedEvents.length === 0 && !addOpen && <div className="day-panel-empty">この日の予定はまだありません。</div>}
-
-          {selectedEvents.map((event) =>
-            editingId === event.id ? (
-              <div className="day-panel-form" key={event.id}>
-                <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="予定名" />
-                <input type="datetime-local" value={editStartAt} onChange={(e) => setEditStartAt(e.target.value)} />
+            {addOpen && (
+              <div className="day-panel-form">
+                <input
+                  autoFocus
+                  value={addForm.title}
+                  onChange={(e) => setAddForm((f) => ({ ...f, title: e.target.value }))}
+                  placeholder="予定名"
+                />
+                <div className="event-time-row">
+                  <label>
+                    <span>開始</span>
+                    <input
+                      type="time"
+                      value={addForm.startTime}
+                      onChange={(e) => setAddForm((f) => ({ ...f, startTime: e.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    <span>終了</span>
+                    <input
+                      type="time"
+                      value={addForm.endTime}
+                      onChange={(e) => setAddForm((f) => ({ ...f, endTime: e.target.value }))}
+                    />
+                  </label>
+                </div>
+                <p className="field-hint">時刻を空欄にすると「終日」として扱われます。</p>
+                <textarea
+                  className="event-description"
+                  value={addForm.description}
+                  onChange={(e) => setAddForm((f) => ({ ...f, description: e.target.value }))}
+                  placeholder="詳細・メモ（任意）"
+                />
                 <div className="day-panel-form-actions">
-                  <button className="btn btn-primary" onClick={() => update.mutate(event)}>
+                  <button className="btn btn-primary" disabled={!addForm.title.trim() || add.isPending} onClick={() => add.mutate()}>
                     保存
                   </button>
-                  <button className="btn btn-ghost" onClick={() => setEditingId(null)}>
+                  <button className="btn btn-ghost" onClick={() => setAddOpen(false)}>
                     キャンセル
                   </button>
                 </div>
               </div>
-            ) : (
-              <article className="day-event-card" key={event.id}>
-                <span className="day-event-time">{toTimeLabel(event.start_at)}</span>
-                <span className="day-event-title">{event.title}</span>
-                <div className="day-event-actions">
-                  <button
-                    className="btn-icon"
-                    aria-label="編集"
-                    onClick={() => {
-                      setAddOpen(false);
-                      setEditingId(event.id);
-                      setEditTitle(event.title);
-                      setEditStartAt(toLocalDateTimeInput(event.start_at));
-                    }}
-                  >
-                    <Pencil size={14} />
-                  </button>
-                  <button className="btn-icon" aria-label="削除" onClick={() => window.confirm("この予定を削除しますか？") && remove.mutate(event.id)}>
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </article>
-            ),
-          )}
-        </div>
-      </aside>
+            )}
+
+            <div className="day-panel-list">
+              {selectedEvents.length === 0 && !addOpen && <div className="day-panel-empty">この日の予定はまだありません。</div>}
+
+              {selectedEvents.map((event) =>
+                editingId === event.id ? (
+                  <div className="day-panel-form" key={event.id}>
+                    <input value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} placeholder="予定名" />
+                    <div className="event-time-row">
+                      <label>
+                        <span>開始</span>
+                        <input
+                          type="time"
+                          value={editForm.startTime}
+                          onChange={(e) => setEditForm((f) => ({ ...f, startTime: e.target.value }))}
+                        />
+                      </label>
+                      <label>
+                        <span>終了</span>
+                        <input
+                          type="time"
+                          value={editForm.endTime}
+                          onChange={(e) => setEditForm((f) => ({ ...f, endTime: e.target.value }))}
+                        />
+                      </label>
+                    </div>
+                    <p className="field-hint">時刻を空欄にすると「終日」として扱われます。</p>
+                    <textarea
+                      className="event-description"
+                      value={editForm.description}
+                      onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                      placeholder="詳細・メモ（任意）"
+                    />
+                    <div className="day-panel-form-actions">
+                      <button className="btn btn-primary" onClick={() => update.mutate(event)}>
+                        保存
+                      </button>
+                      <button className="btn btn-ghost" onClick={() => setEditingId(null)}>
+                        キャンセル
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <article className="day-event-card" key={event.id}>
+                    <div className="day-event-main">
+                      <div className="day-event-top">
+                        <span className="day-event-time">{eventTimeRangeLabel(event)}</span>
+                        <span className="day-event-title">{event.title}</span>
+                      </div>
+                      {event.description && <p className="day-event-desc">{event.description}</p>}
+                    </div>
+                    <div className="day-event-actions">
+                      <button
+                        className="btn-icon"
+                        aria-label="編集"
+                        onClick={() => {
+                          setAddOpen(false);
+                          setEditingId(event.id);
+                          setEditForm({
+                            title: event.title,
+                            startTime: timeInputValue(event.start_at),
+                            endTime: timeInputValue(event.end_at),
+                            description: event.description ?? "",
+                          });
+                        }}
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button className="btn-icon" aria-label="削除" onClick={() => window.confirm("この予定を削除しますか？") && remove.mutate(event.id)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </article>
+                ),
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

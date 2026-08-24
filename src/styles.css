@@ -958,14 +958,11 @@ a {
 /* ---------- Calendar (予定) ---------- */
 
 .calendar-page {
-  display: flex;
-  gap: var(--space-5);
-  align-items: flex-start;
+  width: 100%;
 }
 
 .calendar-card {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -1024,11 +1021,12 @@ a {
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  grid-auto-rows: minmax(112px, 1fr);
+  grid-auto-rows: minmax(124px, 1fr);
   gap: 6px;
 }
 
 .calendar-cell {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -1088,9 +1086,7 @@ a {
   min-width: 0;
 }
 .calendar-event-pill {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  display: block;
   background: var(--accent-soft);
   color: #c7cfff;
   border-radius: 6px;
@@ -1099,11 +1095,6 @@ a {
   font-weight: 600;
   width: 100%;
   min-width: 0;
-}
-.calendar-event-time {
-  color: #9eb0ff;
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
 }
 .calendar-event-title {
   overflow: hidden;
@@ -1118,17 +1109,59 @@ a {
   padding-left: 2px;
 }
 
-.day-panel {
-  flex: 0 0 320px;
+.calendar-add-hint {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.calendar-cell:hover .calendar-add-hint {
+  opacity: 1;
+}
+
+/* ---------- 日付ポップアップ ---------- */
+
+.day-popup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+}
+
+.day-popup {
+  position: fixed;
+  z-index: 46;
+  width: 340px;
+  max-width: calc(100vw - 24px);
+  max-height: min(480px, calc(100vh - 24px));
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
   padding: var(--space-4);
-  box-shadow: var(--shadow-md);
-  align-self: stretch;
+  box-shadow: var(--shadow-lg);
+  animation: popup-in 0.12s ease;
+}
+@keyframes popup-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .day-panel-header {
@@ -1161,6 +1194,27 @@ a {
   gap: 8px;
 }
 
+.event-time-row {
+  display: flex;
+  gap: 8px;
+}
+.event-time-row label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-faint);
+}
+.event-description {
+  min-height: 64px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
 .day-panel-list {
   display: flex;
   flex-direction: column;
@@ -1176,7 +1230,7 @@ a {
 
 .day-event-card {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   background: var(--bg-inset);
   border: 1px solid var(--border);
@@ -1187,24 +1241,127 @@ a {
 .day-event-card:hover {
   border-color: var(--border-strong);
 }
+.day-event-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.day-event-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 .day-event-time {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--accent);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
 .day-event-title {
-  flex: 1;
   min-width: 0;
   font-size: 13px;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+.day-event-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
 .day-event-actions {
   display: flex;
   gap: 4px;
   flex-shrink: 0;
+}
+
+/* ---------- 添付ファイル ---------- */
+
+.attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.attachment-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+}
+.attachment-thumb {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+}
+.attachment-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.attachment-thumb-loading {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+.attachment-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  color: var(--text-faint);
+}
+.attachment-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(6, 7, 10, 0.85);
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+}
+.lightbox-image {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+.lightbox-close {
+  position: fixed;
+  top: var(--space-4);
+  right: var(--space-4);
+  background: var(--bg-elevated);
+  color: var(--text);
 }
 
 /* ---------- Toasts ---------- */
@@ -1250,16 +1407,6 @@ a {
 }
 
 /* ---------- Responsive ---------- */
-
-@media (max-width: 1100px) {
-  .calendar-page {
-    flex-direction: column;
-  }
-  .day-panel {
-    flex: 1;
-    width: 100%;
-  }
-}
 
 @media (max-width: 860px) {
   .app-shell {
@@ -1364,8 +1511,7 @@ a {
     grid-template-columns: 1fr;
   }
 
-  .calendar-card,
-  .day-panel {
+  .calendar-card {
     padding: var(--space-3);
   }
   .calendar-grid {
@@ -1379,8 +1525,17 @@ a {
     font-size: 9px;
     padding: 1px 4px;
   }
-  .calendar-event-time {
-    display: none;
+
+  /* 日付ポップアップは画面下部のシートとして表示 */
+  .day-popup {
+    position: fixed !important;
+    left: 12px !important;
+    right: 12px !important;
+    top: auto !important;
+    bottom: calc(70px + env(safe-area-inset-bottom)) !important;
+    width: auto;
+    max-width: none;
+    max-height: 55vh;
   }
 }
 

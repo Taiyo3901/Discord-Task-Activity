@@ -12,27 +12,17 @@ type Member = {
   role: Role;
   profiles: { display_name: string | null; discord_username: string | null; avatar_url: string | null } | null;
 };
-type LookupResult = { display_name: string | null; avatar_url: string | null; discord_username: string | null };
-
-function isSnowflake(id: string) {
-  return /^\d{15,25}$/.test(id);
-}
-
-/** まだ一度もログインしていない相手はprofilesに行が無いため、Discordのデフォルトアイコンを算出してフォールバックする。 */
-function defaultDiscordAvatar(id: string): string {
-  const index = Number((BigInt(id) >> 22n) % 6n);
-  return `https://cdn.discordapp.com/embed/avatars/${index}.png`;
-}
+type LookupResult = { discord_user_id: string; display_name: string | null; avatar_url: string | null; discord_username: string | null };
 
 export function MembersView({ client, group, currentUserId }: { client: SupabaseClient; group: Group; currentUserId: string }) {
   const queryClient = useQueryClient();
   const toast = useToast();
-  const [discordId, setDiscordId] = useState("");
+  const [username, setUsername] = useState("");
   const [role, setRole] = useState<Role>("member");
 
   const membersKey = ["members", group.id];
   const invitesKey = ["invites", group.id];
-  const trimmedId = discordId.trim();
+  const trimmedUsername = username.trim().replace(/^@/, "");
 
   const membersQuery = useQuery({
     queryKey: membersKey,
@@ -48,14 +38,16 @@ export function MembersView({ client, group, currentUserId }: { client: Supabase
   });
 
   const lookupQuery = useQuery({
-    queryKey: ["invite-lookup", trimmedId],
+    queryKey: ["invite-lookup", trimmedUsername],
     queryFn: async () => {
-      const { data, error } = await client.rpc("lookup_profile_by_discord_id", { discord_id: trimmedId });
+      const { data, error } = await client.rpc("lookup_profile_by_username", { username: trimmedUsername });
       if (error) throw error;
       return (Array.isArray(data) ? data[0] : data) as LookupResult | null;
     },
-    enabled: isSnowflake(trimmedId),
+    enabled: trimmedUsername.length >= 2,
   });
+  const matched = lookupQuery.data ?? null;
+  const notFound = trimmedUsername.length >= 2 && !lookupQuery.isFetching && !matched;
 
   const members = membersQuery.data ?? [];
   const myRole = members.find((m) => m.supabase_user_id === currentUserId)?.role;
@@ -63,9 +55,10 @@ export function MembersView({ client, group, currentUserId }: { client: Supabase
 
   const invite = useMutation({
     mutationFn: async () => {
+      if (!matched) throw new Error("ユーザーネームが見つかりません。");
       const { error } = await client.from("invites").insert({
         group_id: group.id,
-        discord_user_id: trimmedId,
+        discord_user_id: matched.discord_user_id,
         role,
         status: "pending",
         invited_by: currentUserId,
@@ -74,7 +67,7 @@ export function MembersView({ client, group, currentUserId }: { client: Supabase
       if (error) throw error;
     },
     onSuccess: () => {
-      setDiscordId("");
+      setUsername("");
       void queryClient.invalidateQueries({ queryKey: invitesKey });
     },
     onError: (error) => toast(error instanceof Error ? error.message : "招待に失敗しました。", "error"),
@@ -116,24 +109,26 @@ export function MembersView({ client, group, currentUserId }: { client: Supabase
 
       {isAdmin && (
         <div className="toolbar-row">
-          {isSnowflake(trimmedId) ? (
-            <Avatar
-              name={lookupQuery.data?.display_name ?? lookupQuery.data?.discord_username ?? "?"}
-              url={lookupQuery.data?.avatar_url ?? defaultDiscordAvatar(trimmedId)}
-            />
+          {matched ? (
+            <Avatar name={matched.display_name ?? matched.discord_username ?? "?"} url={matched.avatar_url} />
           ) : (
             <span className="avatar invite-preview-empty" />
           )}
-          <input value={discordId} onChange={(e) => setDiscordId(e.target.value)} placeholder="Discord User ID" />
+          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Discordのユーザーネーム" />
           <select value={role} onChange={(e) => setRole(e.target.value as Role)}>
             <option value="admin">admin</option>
             <option value="member">member</option>
             <option value="viewer">viewer</option>
           </select>
-          <button className="btn btn-primary" disabled={!trimmedId} onClick={() => invite.mutate()}>
+          <button className="btn btn-primary" disabled={!matched} onClick={() => invite.mutate()}>
             招待
           </button>
         </div>
+      )}
+      {isAdmin && notFound && (
+        <p className="field-hint invite-not-found">
+          このユーザーネームは見つかりませんでした。相手が一度でもこのアプリにログインしていれば表示されます。
+        </p>
       )}
 
       <div className="panel-section">

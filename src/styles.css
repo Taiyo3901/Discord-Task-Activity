@@ -680,28 +680,6 @@ a {
   color: var(--text-muted);
 }
 
-.save-state {
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 11px;
-  font-weight: 600;
-  background: var(--bg-hover);
-  color: var(--text-muted);
-}
-.save-state.saved {
-  background: var(--success-bg);
-  color: #7ee2a8;
-}
-.save-state.editing,
-.save-state.saving {
-  background: var(--warning-bg);
-  color: var(--warning);
-}
-.save-state.conflict {
-  background: var(--danger-bg);
-  color: #ff9ea3;
-}
-
 .presence-box {
   display: flex;
   gap: 8px;
@@ -721,20 +699,6 @@ a {
   width: 18px;
   height: 18px;
   font-size: 9px;
-}
-
-.conflict-box {
-  background: var(--danger-bg);
-  border: 1px solid #6c2429;
-  border-radius: var(--radius-md);
-  padding: var(--space-3);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.conflict-box .actions {
-  display: flex;
-  gap: 8px;
 }
 
 /* ---------- Modal ---------- */
@@ -832,38 +796,90 @@ a {
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-5);
-  overflow-y: auto;
+  overflow: hidden;
 }
 
-/* 本文エディタの左上にアイコンを重ねて表示し、直近の更新者が一目でわかるようにする */
-.editor-wrap {
-  position: relative;
+/* ---------- 本文: チャット形式(1行=1発言者) ---------- */
+
+.block-feed {
   flex: 1;
-  display: flex;
   min-height: 0;
-}
-.editor-author-badge {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 2;
-  cursor: default;
-}
-.editor-author-badge .avatar {
-  width: 26px;
-  height: 26px;
-  font-size: 11px;
-  box-shadow: 0 0 0 3px var(--bg-elevated);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-right: 4px;
 }
 
-.editor-large {
-  flex: 1;
-  min-height: 260px;
-  padding-left: 46px;
-  transition: padding-left 0.12s ease;
+.block-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
 }
-.editor-large.no-badge {
-  padding-left: 14px;
+.block-row .avatar {
+  margin-top: 2px;
+}
+.block-body {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+}
+.block-row.mine .block-body {
+  border-color: var(--border-strong);
+  background: var(--accent-soft);
+}
+.block-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.block-author {
+  font-size: 12px;
+  font-weight: 700;
+}
+.block-time {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.block-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.block-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.block-row:hover .block-actions {
+  opacity: 1;
+}
+
+.compose-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+.compose-row .avatar {
+  margin-bottom: 8px;
+}
+.compose-input {
+  flex: 1;
+  min-height: 44px;
+  max-height: 160px;
+  resize: vertical;
+  line-height: 1.5;
 }
 
 .modal-sidebar {
@@ -970,6 +986,10 @@ a {
 .invite-preview-empty {
   background: var(--bg-inset);
   border: 1px dashed var(--border-strong);
+}
+.invite-not-found {
+  margin-top: -8px;
+  margin-bottom: var(--space-3);
 }
 
 .list {
@@ -1686,16 +1706,29 @@ a {
   }
   .modal-layout {
     flex-direction: column;
-    overflow-y: auto;
+    overflow: hidden;
+  }
+  .modal-main {
+    flex: 1 1 52%;
+    min-height: 0;
+    padding: var(--space-3);
   }
   .modal-sidebar {
-    flex: 0 0 auto;
+    flex: 1 1 48%;
     max-width: none;
+    min-height: 0;
     border-left: 0;
     border-top: 1px solid var(--border);
+    padding: var(--space-3);
   }
-  .editor-large {
-    min-height: 180px;
+  .due-input-row {
+    flex-direction: column;
+  }
+  .block-body {
+    padding: 8px 10px;
+  }
+  .compose-row .avatar {
+    display: none;
   }
 
   .calendar-card {

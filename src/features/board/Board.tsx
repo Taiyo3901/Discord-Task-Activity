@@ -57,7 +57,6 @@ export function Board({
         .select()
         .single();
       if (error) throw error;
-      await client.from("task_pages").insert({ task_id: data.id, title: data.title, content: "", version: 1, updated_by: currentUserId });
       return data;
     },
     onSuccess: () => void queryClient.invalidateQueries({ queryKey }),

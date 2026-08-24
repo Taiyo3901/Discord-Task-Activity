@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LayoutGrid, CalendarDays, Users, Settings, UserCircle, LogOut, Plus } from "lucide-react";
 import type { AppSession, Group } from "../types";
@@ -42,6 +42,36 @@ export function AppShell({ session, onSignOut }: { session: AppSession; onSignOu
 
   const groups = groupsQuery.data ?? [];
   const currentGroup = groups.find((g) => g.id === currentGroupId) ?? groups[0] ?? null;
+
+  /**
+   * Activityを開いたまま招待されても、リロードせずに参加できるようにする。
+   * invitesの変更をリアルタイム購読し、届いたら自分宛の招待を承諾してグループ一覧を更新する。
+   * RLSで自分に関係する招待しか届かないため、フィルタなしで購読して問題ない。
+   * WebSocket切断など不測の事態に備え、定期ポーリングも並走させる。
+   */
+  useEffect(() => {
+    async function acceptAndRefresh() {
+      try {
+        await client.rpc("accept_my_discord_invites");
+      } catch {
+        // 失敗しても次回のポーリング/イベントで再試行されるため無視する
+      }
+      void queryClient.invalidateQueries({ queryKey: ["groups", userId] });
+    }
+
+    const channel = client
+      .channel(`invites-watch-${userId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "invites" }, () => void acceptAndRefresh())
+      .subscribe();
+
+    const interval = window.setInterval(() => void acceptAndRefresh(), 90_000);
+
+    return () => {
+      void client.removeChannel(channel);
+      window.clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   const createGroup = useMutation({
     mutationFn: async (name: string) => {

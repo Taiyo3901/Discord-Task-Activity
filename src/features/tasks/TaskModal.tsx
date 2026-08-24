@@ -1,20 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Trash2, X } from "lucide-react";
-import type { Group, PresencePayload, Task, TaskPage, TaskStatus } from "../../types";
+import { Pencil, Trash2, X } from "lucide-react";
+import type { Group, PresencePayload, Task, TaskPageBlock, TaskStatus } from "../../types";
 import { Modal } from "../../components/ui/Modal";
 import { Avatar } from "../../components/ui/Avatar";
 import { useToast } from "../../components/ui/ToastProvider";
+import { useRealtimeInvalidate } from "../../hooks/useRealtimeInvalidate";
 import { REMINDER_OPTIONS } from "../../lib/reminders";
 import { LinksPanel } from "./LinksPanel";
 import { AttachmentsPanel } from "./AttachmentsPanel";
 
 const STATUS_LABEL: Record<TaskStatus, string> = { todo: "未着手", doing: "進行中", review: "確認待ち", done: "完了" };
-const SAVE_LABEL: Record<string, string> = { saved: "保存済み", editing: "編集中", saving: "保存中", conflict: "競合あり" };
+const SAVE_DEBOUNCE_MS = 600;
 
 type Member = { supabase_user_id: string; profiles: { display_name: string | null } | null };
-type EditorProfile = { display_name: string | null; avatar_url: string | null };
 
 function relativeTime(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -118,130 +118,119 @@ export function TaskModal({
     onError: (error) => toast(error instanceof Error ? error.message : "削除に失敗しました。", "error"),
   });
 
-  // ページ本文: プレゼンス共有 + 3秒後自動保存 + バージョン競合検知。
-  const [page, setPage] = useState<TaskPage | null>(null);
-  const [draft, setDraft] = useState("");
-  const [state, setState] = useState<"saved" | "editing" | "saving" | "conflict">("saved");
+  // 詳細本文: チャット形式。1行=1ブロックで発言者を明示し、自分の行しか書き換えられない。
+  const blocksQueryKey = ["task-blocks", taskId];
+  const blocksQuery = useQuery({
+    queryKey: blocksQueryKey,
+    queryFn: async () => {
+      const { data, error } = await client
+        .from("task_page_blocks")
+        .select("id,task_id,author_id,content,created_at,updated_at,profiles(display_name,avatar_url)")
+        .eq("task_id", taskId)
+        .order("created_at");
+      if (error) throw error;
+      return (data ?? []) as unknown as TaskPageBlock[];
+    },
+  });
+  useRealtimeInvalidate(client, `task-blocks-${taskId}`, "task_page_blocks", `task_id=eq.${taskId}`, blocksQueryKey);
+
+  const blocks = blocksQuery.data ?? [];
+
+  const [composeDraft, setComposeDraft] = useState("");
+  const [composeBlockId, setComposeBlockId] = useState<string | null>(null);
   const [presence, setPresence] = useState<PresencePayload[]>([]);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const timerRef = useRef<number | null>(null);
-  const stateRef = useRef(state);
-  stateRef.current = state;
-
-  const editorQuery = useQuery({
-    queryKey: ["task-page-editor", page?.updated_by],
-    queryFn: async () => {
-      const { data } = await client.from("profiles").select("display_name,avatar_url").eq("id", page!.updated_by!).maybeSingle();
-      return data as EditorProfile | null;
-    },
-    enabled: !!page?.updated_by,
-  });
+  const feedEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    void loadPage();
-    return () => {
-      if (timerRef.current) window.clearTimeout(timerRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskId]);
-
-  useEffect(() => {
-    if (!page) return;
-    const channel = client.channel(`task-page-${page.id}`, { config: { presence: { key: currentUserId } } });
+    const channel = client.channel(`task-presence-${taskId}`, { config: { presence: { key: currentUserId } } });
     channelRef.current = channel;
     channel
       .on("presence", { event: "sync" }, () => {
         const values = Object.values(channel.presenceState()).flat() as unknown as PresencePayload[];
         setPresence(values.filter((p) => p.user_id !== currentUserId));
       })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "task_pages", filter: `id=eq.${page.id}` }, (payload) => {
-        const updated = payload.new as TaskPage;
-        setPage((current) => {
-          if (current && updated.version > current.version && stateRef.current === "saved") setDraft(updated.content);
-          return updated;
-        });
-      })
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") void track("viewing");
-      });
+      .subscribe();
     return () => {
       channelRef.current = null;
       void client.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page?.id, currentUserId]);
+  }, [taskId, currentUserId]);
 
-  async function loadPage() {
-    const { data } = await client.from("task_pages").select("*").eq("task_id", taskId).single();
-    if (data) {
-      setPage(data);
-      setDraft(data.content);
-      setState("saved");
-    }
-  }
+  useEffect(() => {
+    feedEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [blocks.length]);
 
-  async function track(status: "viewing" | "editing") {
+  async function trackTyping(isEditing: boolean) {
     await channelRef.current?.track({
       user_id: currentUserId,
       display_name: displayName,
       avatar_url: avatarUrl,
-      status,
-      field: status === "editing" ? "content" : null,
+      status: isEditing ? "editing" : "viewing",
+      field: null,
       updated_at: new Date().toISOString(),
     } satisfies PresencePayload);
   }
 
-  function onChangeDraft(value: string) {
-    setDraft(value);
-    setState("editing");
-    void track("editing");
+  function onComposeChange(value: string) {
+    setComposeDraft(value);
+    void trackTyping(value.length > 0);
     if (timerRef.current) window.clearTimeout(timerRef.current);
-    timerRef.current = window.setTimeout(() => void save(value), 3000);
+    timerRef.current = window.setTimeout(() => void saveDraft(value), SAVE_DEBOUNCE_MS);
   }
 
-  async function save(value: string) {
-    if (!page) return;
-    setState("saving");
-    const { data, error } = await client
-      .from("task_pages")
-      .update({ content: value, version: page.version + 1, updated_by: currentUserId })
-      .eq("id", page.id)
-      .eq("version", page.version)
-      .select()
-      .maybeSingle();
-    if (error || !data) {
-      setState("conflict");
-      return;
+  async function saveDraft(content: string) {
+    if (!content.trim()) return;
+    if (composeBlockId) {
+      await client.from("task_page_blocks").update({ content }).eq("id", composeBlockId);
+    } else {
+      const { data, error } = await client
+        .from("task_page_blocks")
+        .insert({ task_id: taskId, author_id: currentUserId, content })
+        .select()
+        .single();
+      if (!error && data) setComposeBlockId(data.id);
     }
-    setPage(data);
-    setDraft(data.content);
-    setState("saved");
-    await track("viewing");
+    void queryClient.invalidateQueries({ queryKey: blocksQueryKey });
   }
 
-  async function reloadLatest() {
-    if (!page) return;
-    const { data } = await client.from("task_pages").select("*").eq("id", page.id).single();
-    if (data) {
-      setPage(data);
-      setDraft(data.content);
-      setState("saved");
+  async function submitBlock() {
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    const content = composeDraft.trim();
+    if (!content) return;
+    if (composeBlockId) {
+      await client.from("task_page_blocks").update({ content }).eq("id", composeBlockId);
+    } else {
+      await client.from("task_page_blocks").insert({ task_id: taskId, author_id: currentUserId, content });
+    }
+    setComposeDraft("");
+    setComposeBlockId(null);
+    void trackTyping(false);
+    void queryClient.invalidateQueries({ queryKey: blocksQueryKey });
+  }
+
+  function onComposeKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void submitBlock();
     }
   }
 
-  async function overwrite() {
-    if (!page) return;
-    const { data: latest } = await client.from("task_pages").select("version").eq("id", page.id).single();
-    const { data } = await client
-      .from("task_pages")
-      .update({ content: draft, version: (latest?.version ?? page.version) + 1, updated_by: currentUserId })
-      .eq("id", page.id)
-      .select()
-      .single();
-    if (data) {
-      setPage(data);
-      setState("saved");
+  function editOwnBlock(block: TaskPageBlock) {
+    setComposeBlockId(block.id);
+    setComposeDraft(block.content);
+  }
+
+  async function deleteBlock(id: string) {
+    const { error } = await client.from("task_page_blocks").delete().eq("id", id);
+    if (error) return toast(error.message, "error");
+    if (composeBlockId === id) {
+      setComposeBlockId(null);
+      setComposeDraft("");
     }
+    void queryClient.invalidateQueries({ queryKey: blocksQueryKey });
   }
 
   if (!task) {
@@ -262,7 +251,6 @@ export function TaskModal({
           onBlur={() => titleDraft.trim() && titleDraft !== task.title && updateTask.mutate({ title: titleDraft.trim() })}
         />
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-          <span className={`save-state ${state}`}>{SAVE_LABEL[state]}</span>
           <button
             className="btn-icon"
             onClick={() => window.confirm("このタスクを削除しますか？") && deleteTask.mutate()}
@@ -283,41 +271,51 @@ export function TaskModal({
               {presence.map((p, i) => (
                 <span key={`${p.user_id}-${i}`} className="presence-chip">
                   <Avatar name={p.display_name} url={p.avatar_url} />
-                  {p.display_name}が{p.status === "editing" ? "入力中" : "閲覧中"}
+                  {p.display_name}が入力中
                 </span>
               ))}
             </div>
           )}
 
-          {state === "conflict" && (
-            <div className="conflict-box">
-              <p>他のメンバーが先に更新しました。編集中の内容は保持されています。</p>
-              <div className="actions">
-                <button className="btn btn-ghost" onClick={() => void reloadLatest()}>
-                  最新版を見る
-                </button>
-                <button className="btn btn-primary" onClick={() => void overwrite()}>
-                  自分の内容で上書き
-                </button>
+          <div className="block-feed">
+            {blocks.length === 0 && <div className="day-panel-empty">まだ記入がありません。下の欄から書き始めてください。</div>}
+            {blocks.map((block) => (
+              <div className={`block-row ${block.author_id === currentUserId ? "mine" : ""}`} key={block.id}>
+                <Avatar name={block.profiles?.display_name ?? "?"} url={block.profiles?.avatar_url} />
+                <div className="block-body">
+                  <div className="block-meta">
+                    <span className="block-author">{block.profiles?.display_name ?? "メンバー"}</span>
+                    <span className="block-time">{relativeTime(block.updated_at)}</span>
+                  </div>
+                  <p className="block-text">{block.content}</p>
+                </div>
+                {block.author_id === currentUserId && (
+                  <div className="block-actions">
+                    <button className="btn-icon" aria-label="編集" onClick={() => editOwnBlock(block)}>
+                      <Pencil size={13} />
+                    </button>
+                    <button className="btn-icon" aria-label="削除" onClick={() => void deleteBlock(block.id)}>
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            ))}
+            <div ref={feedEndRef} />
+          </div>
 
-          <div className="editor-wrap">
-            {page && draft.length > 0 && (
-              <span
-                className="editor-author-badge"
-                title={`${editorQuery.data?.display_name ?? "メンバー"}が${relativeTime(page.updated_at)}に更新`}
-              >
-                <Avatar name={editorQuery.data?.display_name ?? "?"} url={editorQuery.data?.avatar_url} />
-              </span>
-            )}
+          <div className="compose-row">
+            {composeDraft.length > 0 && <Avatar name={displayName} url={avatarUrl} />}
             <textarea
-              className={`editor editor-large ${draft.length > 0 ? "" : "no-badge"}`}
-              value={draft}
-              onChange={(e) => onChangeDraft(e.target.value)}
-              placeholder="詳細、メモ、仕様を書いてください。"
+              className={`compose-input ${composeDraft.length > 0 ? "" : "no-badge"}`}
+              value={composeDraft}
+              onChange={(e) => onComposeChange(e.target.value)}
+              onKeyDown={onComposeKeyDown}
+              placeholder="続きを書く（Enterで送信 / Shift+Enterで改行）"
             />
+            <button className="btn btn-primary btn-sm" disabled={!composeDraft.trim()} onClick={() => void submitBlock()}>
+              送信
+            </button>
           </div>
         </div>
 

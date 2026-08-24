@@ -95,7 +95,5 @@ Deno.serve(async (req) => {
     .single();
   if (taskError || !task) return reply(`タスク作成に失敗しました: ${taskError?.message ?? "不明なエラー"}`);
 
-  await admin.from("task_pages").insert({ task_id: task.id, title: task.title, content: "", version: 1, updated_by: profile.id });
-
   return reply(`✅ 「${group.name}」に「${title}」を追加しました。`);
 });

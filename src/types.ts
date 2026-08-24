@@ -56,15 +56,14 @@ export type TaskSummary = Task & {
   attachment_count: number;
 };
 
-export type TaskPage = {
+export type TaskPageBlock = {
   id: string;
   task_id: string;
-  title: string;
+  author_id: string;
   content: string;
-  version: number;
-  updated_by: string | null;
   created_at: string;
   updated_at: string;
+  profiles: { display_name: string | null; avatar_url: string | null } | null;
 };
 
 export type EventItem = {

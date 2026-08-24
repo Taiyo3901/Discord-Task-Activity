@@ -106,6 +106,12 @@ export function TaskModal({
     updateTask.mutate({ ...patch, notified_at: null });
   }
 
+  /** モバイルでソフトウェアキーボードが開いたまま固まる不具合を避けるため、閉じる前にフォーカスを外す。 */
+  function closeModal() {
+    (document.activeElement as HTMLElement | null)?.blur();
+    onClose();
+  }
+
   const deleteTask = useMutation({
     mutationFn: async () => {
       const { error } = await client.from("tasks").delete().eq("id", taskId);
@@ -113,7 +119,7 @@ export function TaskModal({
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["tasks", group.id] });
-      onClose();
+      closeModal();
     },
     onError: (error) => toast(error instanceof Error ? error.message : "削除に失敗しました。", "error"),
   });
@@ -258,7 +264,7 @@ export function TaskModal({
           >
             <Trash2 size={16} />
           </button>
-          <button className="btn-icon" onClick={onClose} aria-label="閉じる">
+          <button className="btn-icon modal-close-btn" onClick={closeModal} aria-label="閉じる">
             <X size={18} />
           </button>
         </div>
@@ -399,6 +405,12 @@ export function TaskModal({
           <AttachmentsPanel client={client} taskId={taskId} groupId={group.id} userId={currentUserId} />
         </aside>
       </div>
+
+      {/* スクロール位置に関係なく常に押せる、大きめの閉じるボタン(スマホ表示のみ)。 */}
+      <button className="mobile-close-fab" onClick={closeModal} aria-label="タスク詳細を閉じる">
+        <X size={18} />
+        閉じる
+      </button>
     </Modal>
   );
 }

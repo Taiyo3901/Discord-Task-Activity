@@ -747,9 +747,10 @@ a {
 }
 
 .modal {
-  width: min(1100px, 100%);
-  height: min(86vh, 920px);
-  max-height: min(86vh, 920px);
+  width: calc(100vw - 64px);
+  max-width: 1800px;
+  height: min(90vh, 980px);
+  max-height: min(90vh, 980px);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -821,49 +822,56 @@ a {
 }
 
 .modal-main {
-  flex: 1;
+  flex: 1.6;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-5);
   overflow-y: auto;
 }
 
-.editor-meta-row {
+/* 本文エディタの左上にアイコンを重ねて表示し、直近の更新者が一目でわかるようにする */
+.editor-wrap {
+  position: relative;
+  flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
+  min-height: 0;
 }
-.editor-attribution {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-faint);
+.editor-author-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  cursor: default;
 }
-.editor-attribution .avatar {
-  width: 20px;
-  height: 20px;
-  font-size: 10px;
+.editor-author-badge .avatar {
+  width: 26px;
+  height: 26px;
+  font-size: 11px;
+  box-shadow: 0 0 0 3px var(--bg-elevated);
 }
 
 .editor-large {
   flex: 1;
   min-height: 260px;
+  padding-left: 46px;
 }
 
 .modal-sidebar {
-  flex: 0 0 300px;
+  flex: 1;
+  flex-basis: 380px;
+  max-width: 440px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
+  gap: var(--space-4);
+  padding: var(--space-5);
   border-left: 1px solid var(--border);
   background: var(--bg-elevated-2);
   overflow-y: auto;
+}
+.modal-sidebar .field-hint {
+  line-height: 1.6;
 }
 
 .due-input-row {
@@ -876,9 +884,9 @@ a {
 }
 
 .task-summary-input {
-  min-height: 56px;
+  min-height: 72px;
   resize: vertical;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .mini-panel {
@@ -1312,6 +1320,17 @@ a {
   line-height: 1.5;
 }
 
+.event-reminder-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-faint);
+}
+
 .day-panel-list {
   display: flex;
   flex-direction: column;
@@ -1651,6 +1670,7 @@ a {
   }
   .modal-sidebar {
     flex: 0 0 auto;
+    max-width: none;
     border-left: 0;
     border-top: 1px solid var(--border);
   }

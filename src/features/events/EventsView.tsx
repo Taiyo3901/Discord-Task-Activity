@@ -5,6 +5,7 @@ import { CalendarDays, CheckSquare, ChevronLeft, ChevronRight, Pencil, Plus, Squ
 import type { EventItem, Group, TaskSummary } from "../../types";
 import { useToast } from "../../components/ui/ToastProvider";
 import { useRealtimeInvalidate } from "../../hooks/useRealtimeInvalidate";
+import { REMINDER_OPTIONS } from "../../lib/reminders";
 
 const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 const POPUP_WIDTH = 340;
@@ -66,8 +67,8 @@ function computePopupPosition(rect: DOMRect) {
   return { top, left };
 }
 
-type EventFormState = { title: string; startTime: string; endTime: string; description: string };
-const EMPTY_FORM: EventFormState = { title: "", startTime: "10:00", endTime: "", description: "" };
+type EventFormState = { title: string; startTime: string; endTime: string; description: string; reminderMinutes: number | null };
+const EMPTY_FORM: EventFormState = { title: "", startTime: "10:00", endTime: "", description: "", reminderMinutes: null };
 type CalendarTask = Pick<TaskSummary, "id" | "title" | "description" | "status" | "priority" | "due_date" | "due_time">;
 
 export function EventsView({ client, group, currentUserId }: { client: SupabaseClient; group: Group; currentUserId: string }) {
@@ -186,6 +187,7 @@ export function EventsView({ client, group, currentUserId }: { client: SupabaseC
         description: addForm.description.trim() || null,
         start_at: startAt.toISOString(),
         end_at: endAt ? endAt.toISOString() : null,
+        reminder_minutes: addForm.reminderMinutes,
         created_by: currentUserId,
         updated_by: currentUserId,
       });
@@ -211,6 +213,8 @@ export function EventsView({ client, group, currentUserId }: { client: SupabaseC
           description: editForm.description.trim() || null,
           start_at: startAt.toISOString(),
           end_at: endAt ? endAt.toISOString() : null,
+          reminder_minutes: editForm.reminderMinutes,
+          notified_at: null,
           updated_by: currentUserId,
         })
         .eq("id", event.id);
@@ -365,6 +369,20 @@ export function EventsView({ client, group, currentUserId }: { client: SupabaseC
                   onChange={(e) => setAddForm((f) => ({ ...f, description: e.target.value }))}
                   placeholder="詳細・メモ（任意）"
                 />
+                <label className="event-reminder-field">
+                  <span>通知タイミング</span>
+                  <select
+                    value={addForm.reminderMinutes ?? "default"}
+                    onChange={(e) => setAddForm((f) => ({ ...f, reminderMinutes: e.target.value === "default" ? null : Number(e.target.value) }))}
+                  >
+                    <option value="default">グループの既定値を使う</option>
+                    {REMINDER_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <div className="day-panel-form-actions">
                   <button className="btn btn-primary" disabled={!addForm.title.trim() || add.isPending} onClick={() => add.mutate()}>
                     保存
@@ -408,6 +426,20 @@ export function EventsView({ client, group, currentUserId }: { client: SupabaseC
                       onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
                       placeholder="詳細・メモ（任意）"
                     />
+                    <label className="event-reminder-field">
+                      <span>通知タイミング</span>
+                      <select
+                        value={editForm.reminderMinutes ?? "default"}
+                        onChange={(e) => setEditForm((f) => ({ ...f, reminderMinutes: e.target.value === "default" ? null : Number(e.target.value) }))}
+                      >
+                        <option value="default">グループの既定値を使う</option>
+                        {REMINDER_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <div className="day-panel-form-actions">
                       <button className="btn btn-primary" onClick={() => update.mutate(event)}>
                         保存
@@ -438,6 +470,7 @@ export function EventsView({ client, group, currentUserId }: { client: SupabaseC
                             startTime: timeInputValue(event.start_at),
                             endTime: timeInputValue(event.end_at),
                             description: event.description ?? "",
+                            reminderMinutes: event.reminder_minutes,
                           });
                         }}
                       >

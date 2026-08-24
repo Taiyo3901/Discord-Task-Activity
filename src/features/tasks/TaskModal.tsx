@@ -6,6 +6,7 @@ import type { Group, PresencePayload, Task, TaskPage, TaskStatus } from "../../t
 import { Modal } from "../../components/ui/Modal";
 import { Avatar } from "../../components/ui/Avatar";
 import { useToast } from "../../components/ui/ToastProvider";
+import { REMINDER_OPTIONS } from "../../lib/reminders";
 import { LinksPanel } from "./LinksPanel";
 import { AttachmentsPanel } from "./AttachmentsPanel";
 
@@ -86,7 +87,9 @@ export function TaskModal({
 
   const updateTask = useMutation({
     mutationFn: async (
-      patch: Partial<Pick<Task, "title" | "description" | "status" | "priority" | "due_date" | "due_time" | "assigned_to" | "notified_at">>,
+      patch: Partial<
+        Pick<Task, "title" | "description" | "status" | "priority" | "due_date" | "due_time" | "assigned_to" | "notified_at" | "reminder_minutes">
+      >,
     ) => {
       const { error } = await client.from("tasks").update({ ...patch, updated_by: currentUserId }).eq("id", taskId);
       if (error) throw error;
@@ -272,26 +275,16 @@ export function TaskModal({
 
       <div className="modal-layout">
         <div className="modal-main">
-          <div className="editor-meta-row">
-            {page && (
-              <span className="editor-attribution">
-                <Avatar name={editorQuery.data?.display_name ?? "?"} url={editorQuery.data?.avatar_url} />
-                <span>
-                  {editorQuery.data?.display_name ?? "メンバー"}が{relativeTime(page.updated_at)}に更新
+          {presence.length > 0 && (
+            <div className="presence-box">
+              {presence.map((p, i) => (
+                <span key={`${p.user_id}-${i}`} className="presence-chip">
+                  <Avatar name={p.display_name} url={p.avatar_url} />
+                  {p.display_name}が{p.status === "editing" ? "入力中" : "閲覧中"}
                 </span>
-              </span>
-            )}
-            {presence.length > 0 && (
-              <div className="presence-box">
-                {presence.map((p, i) => (
-                  <span key={`${p.user_id}-${i}`} className="presence-chip">
-                    <Avatar name={p.display_name} url={p.avatar_url} />
-                    {p.display_name}が{p.status === "editing" ? "入力中" : "閲覧中"}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+              ))}
+            </div>
+          )}
 
           {state === "conflict" && (
             <div className="conflict-box">
@@ -307,12 +300,22 @@ export function TaskModal({
             </div>
           )}
 
-          <textarea
-            className="editor editor-large"
-            value={draft}
-            onChange={(e) => onChangeDraft(e.target.value)}
-            placeholder="詳細、メモ、仕様を書いてください。"
-          />
+          <div className="editor-wrap">
+            {page && (
+              <span
+                className="editor-author-badge"
+                title={`${editorQuery.data?.display_name ?? "メンバー"}が${relativeTime(page.updated_at)}に更新`}
+              >
+                <Avatar name={editorQuery.data?.display_name ?? "?"} url={editorQuery.data?.avatar_url} />
+              </span>
+            )}
+            <textarea
+              className="editor editor-large"
+              value={draft}
+              onChange={(e) => onChangeDraft(e.target.value)}
+              placeholder="詳細、メモ、仕様を書いてください。"
+            />
+          </div>
         </div>
 
         <aside className="modal-sidebar">
@@ -344,6 +347,22 @@ export function TaskModal({
               <input type="time" value={task.due_time ?? ""} onChange={(e) => updateDue({ due_time: e.target.value || null })} disabled={!task.due_date} />
             </div>
             <p className="field-hint">時刻は任意です。空欄なら終日扱いになります。</p>
+          </div>
+
+          <div className="field">
+            <label>通知タイミング</label>
+            <select
+              value={task.reminder_minutes ?? "default"}
+              onChange={(e) => updateTask.mutate({ reminder_minutes: e.target.value === "default" ? null : Number(e.target.value) })}
+            >
+              <option value="default">グループの既定値を使う</option>
+              {REMINDER_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <p className="field-hint">このタスクだけ、期限に対するリマインドのタイミングを個別に変更できます。</p>
           </div>
 
           <div className="field">

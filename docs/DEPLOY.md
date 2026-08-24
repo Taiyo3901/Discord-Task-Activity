@@ -44,7 +44,7 @@ npx supabase link --project-ref <project-ref>
 npx supabase db push
 ```
 
-`supabase/migrations/001_init.sql`・`002_redesign.sql`・`003_reminders_and_details.sql`が適用されます。`002_redesign.sql`はpg_cron/pg_netの有効化とcronジョブ登録も含みますが、プロジェクトによっては先にDashboardの `Database > Extensions` でpg_cron / pg_netを手動でONにする必要がある場合があります。失敗した場合はDashboardでONにしてから、SQL Editorで次の2行だけ再実行してください。
+`supabase/migrations/001_init.sql`・`002_redesign.sql`・`003_reminders_and_details.sql`・`004_calendar_fix_and_item_reminders.sql`が適用されます。`002_redesign.sql`はpg_cron/pg_netの有効化とcronジョブ登録も含みますが、プロジェクトによっては先にDashboardの `Database > Extensions` でpg_cron / pg_netを手動でONにする必要がある場合があります。失敗した場合はDashboardでONにしてから、SQL Editorで次の2行だけ再実行してください。
 
 ```sql
 select cron.unschedule(jobid) from cron.job where jobname = 'notify-due-tasks';

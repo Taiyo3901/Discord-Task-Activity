@@ -3,16 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Group } from "../../types";
 import { useToast } from "../../components/ui/ToastProvider";
-
-const REMINDER_OPTIONS = [
-  { value: 0, label: "時間になったら（0分前）" },
-  { value: 15, label: "15分前" },
-  { value: 30, label: "30分前" },
-  { value: 60, label: "1時間前" },
-  { value: 180, label: "3時間前" },
-  { value: 1440, label: "1日前" },
-  { value: 4320, label: "3日前" },
-];
+import { REMINDER_OPTIONS } from "../../lib/reminders";
 
 export function GroupSettingsView({ client, group, currentUserId }: { client: SupabaseClient; group: Group; currentUserId: string }) {
   const queryClient = useQueryClient();
@@ -99,10 +90,11 @@ export function GroupSettingsView({ client, group, currentUserId }: { client: Su
       </div>
 
       <div className="panel-section">
-        <h3>通知タイミング</h3>
+        <h3>通知タイミング（既定値）</h3>
+        <p className="field-hint">ここで設定した内容が、個別に指定していないタスク・予定のデフォルトになります。タスクや予定ごとに個別のタイミングを設定したい場合は、それぞれの詳細画面から設定してください。</p>
 
         <div className="field" style={{ marginTop: 12 }}>
-          <label>タスクの期限リマインド</label>
+          <label>タスクの期限リマインド（既定値）</label>
           <select value={taskReminderMinutes} onChange={(e) => setTaskReminderMinutes(Number(e.target.value))}>
             {REMINDER_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -114,7 +106,7 @@ export function GroupSettingsView({ client, group, currentUserId }: { client: Su
         </div>
 
         <div className="field" style={{ marginTop: 12 }}>
-          <label>予定の開始リマインド</label>
+          <label>予定の開始リマインド（既定値）</label>
           <select value={eventReminderMinutes} onChange={(e) => setEventReminderMinutes(Number(e.target.value))}>
             {REMINDER_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>

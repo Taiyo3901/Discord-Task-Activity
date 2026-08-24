@@ -40,6 +40,7 @@ export type Task = {
   due_date: string | null;
   due_time: string | null;
   assigned_to: string | null;
+  reminder_minutes: number | null;
   created_by: string;
   updated_by: string | null;
   notified_at: string | null;
@@ -72,6 +73,7 @@ export type EventItem = {
   description: string | null;
   start_at: string;
   end_at: string | null;
+  reminder_minutes: number | null;
   created_by: string;
   updated_by: string | null;
   created_at: string;

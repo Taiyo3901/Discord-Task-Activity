@@ -46,3 +46,16 @@ export async function authorizeWithDiscord(activeSdk: DiscordSDK) {
 export async function authenticateWithDiscord(activeSdk: DiscordSDK, discordAccessToken: string) {
   return activeSdk.commands.authenticate({ access_token: discordAccessToken });
 }
+
+/**
+ * Discord Activityのiframe内は通常のリンク遷移(<a target="_blank">やwindow.open)が
+ * サンドボックスによりブロックされるため、SDKの openExternalLink 経由でDiscordクライアントに
+ * 外部ブラウザでの表示を委譲する。Activity外(通常ブラウザ)では素直にwindow.openで開く。
+ */
+export async function openExternalLink(url: string) {
+  if (sdk) {
+    await sdk.commands.openExternalLink({ url });
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+}

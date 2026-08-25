@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { useToast } from "../../components/ui/ToastProvider";
+import { openExternalLink } from "../../lib/discordActivity";
 
 type Link = { id: string; url: string; label: string | null; created_by: string };
 
@@ -62,9 +63,9 @@ export function LinksPanel({ client, taskId, userId }: { client: SupabaseClient;
       <ul className="compact-list">
         {(query.data ?? []).map((l) => (
           <li className="compact-row" key={l.id}>
-            <a href={l.url} target="_blank" rel="noreferrer">
+            <button className="file-button" onClick={() => void openExternalLink(l.url)}>
               {l.label || l.url}
-            </a>
+            </button>
             {l.created_by === userId && (
               <button className="btn-icon" onClick={() => remove.mutate(l.id)} aria-label="削除">
                 <Trash2 size={14} />

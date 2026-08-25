@@ -1,10 +1,12 @@
 import { useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
-import type { Role, Team } from "../../types";
+import { CheckSquare, Square, Trash2, X } from "lucide-react";
+import type { Role, Team, TaskSummary } from "../../types";
 import { useToast } from "../../components/ui/ToastProvider";
 import { Avatar } from "../../components/ui/Avatar";
+import { Modal } from "../../components/ui/Modal";
+import { TaskModal } from "../tasks/TaskModal";
 
 type Member = {
   id: string;
@@ -13,12 +15,27 @@ type Member = {
   profiles: { display_name: string | null; discord_username: string | null; avatar_url: string | null } | null;
 };
 type LookupResult = { discord_user_id: string; display_name: string | null; avatar_url: string | null; discord_username: string | null };
+type MemberTask = Pick<TaskSummary, "id" | "group_id" | "project_name" | "title" | "status" | "priority" | "due_date" | "due_time">;
 
-export function MembersView({ client, team, currentUserId }: { client: SupabaseClient; team: Team; currentUserId: string }) {
+export function MembersView({
+  client,
+  team,
+  currentUserId,
+  displayName,
+  avatarUrl,
+}: {
+  client: SupabaseClient;
+  team: Team;
+  currentUserId: string;
+  displayName: string;
+  avatarUrl: string | null;
+}) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [username, setUsername] = useState("");
   const [role, setRole] = useState<Role>("member");
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [openTask, setOpenTask] = useState<{ id: string; projectId: string } | null>(null);
 
   const membersKey = ["members", team.id];
   const invitesKey = ["invites", team.id];
@@ -52,6 +69,22 @@ export function MembersView({ client, team, currentUserId }: { client: SupabaseC
   const members = membersQuery.data ?? [];
   const myRole = members.find((m) => m.supabase_user_id === currentUserId)?.role;
   const isAdmin = myRole === "owner" || myRole === "admin";
+
+  const memberTasksQuery = useQuery({
+    queryKey: ["member-tasks", team.id, selectedMember?.supabase_user_id],
+    queryFn: async () => {
+      const { data, error } = await client
+        .from("task_summary")
+        .select("id,group_id,project_name,title,status,priority,due_date,due_time")
+        .eq("team_id", team.id)
+        .eq("assigned_to", selectedMember!.supabase_user_id)
+        .order("due_date", { ascending: true, nullsFirst: false });
+      if (error) throw error;
+      return (data ?? []) as MemberTask[];
+    },
+    enabled: !!selectedMember,
+  });
+  const memberTasks = memberTasksQuery.data ?? [];
 
   const invite = useMutation({
     mutationFn: async () => {
@@ -106,7 +139,7 @@ export function MembersView({ client, team, currentUserId }: { client: SupabaseC
   return (
     <section className="panel">
       <h2>メンバー</h2>
-      <p className="field-hint">チームに参加すると、チーム内のすべてのプロジェクトに自動的にアクセスできるようになります。</p>
+      <p className="field-hint">チームに参加すると、チーム内のすべてのプロジェクトに自動的にアクセスできるようになります。メンバーをクリックすると担当タスクを確認できます。</p>
 
       {isAdmin && (
         <div className="toolbar-row">
@@ -136,7 +169,7 @@ export function MembersView({ client, team, currentUserId }: { client: SupabaseC
         <h3>参加中</h3>
         <div className="list">
           {members.map((m) => (
-            <article className="list-card" key={m.id}>
+            <article className="list-card list-card-clickable" key={m.id} onClick={() => setSelectedMember(m)}>
               <div className="list-card-main">
                 <Avatar name={m.profiles?.display_name ?? m.profiles?.discord_username} url={m.profiles?.avatar_url} />
                 <div>
@@ -144,7 +177,7 @@ export function MembersView({ client, team, currentUserId }: { client: SupabaseC
                   <div className="list-card-sub">@{m.profiles?.discord_username ?? "unknown"}</div>
                 </div>
               </div>
-              <div className="list-card-actions">
+              <div className="list-card-actions" onClick={(e) => e.stopPropagation()}>
                 {isAdmin && m.supabase_user_id !== currentUserId ? (
                   <select value={m.role} onChange={(e) => changeRole.mutate({ id: m.id, nextRole: e.target.value as Role })}>
                     <option value="owner">owner</option>
@@ -171,6 +204,69 @@ export function MembersView({ client, team, currentUserId }: { client: SupabaseC
           チームから脱退
         </button>
       </div>
+
+      {selectedMember && (
+        <Modal onClose={() => setSelectedMember(null)}>
+          <header className="modal-header">
+            <div className="list-card-main">
+              <Avatar
+                name={selectedMember.profiles?.display_name ?? selectedMember.profiles?.discord_username}
+                url={selectedMember.profiles?.avatar_url}
+              />
+              <div>
+                <div className="list-card-title">
+                  {selectedMember.profiles?.display_name ?? selectedMember.profiles?.discord_username ?? "メンバー"}の担当タスク
+                </div>
+              </div>
+            </div>
+            <button className="btn-icon modal-close-btn" onClick={() => setSelectedMember(null)} aria-label="閉じる">
+              <X size={18} />
+            </button>
+          </header>
+          <div className="modal-body">
+            {memberTasks.length === 0 ? (
+              <div className="day-panel-empty">担当しているタスクはありません。</div>
+            ) : (
+              <div className="day-panel-list">
+                {memberTasks.map((task) => (
+                  <button
+                    className="day-task-card"
+                    key={task.id}
+                    data-priority={task.priority}
+                    onClick={() => setOpenTask({ id: task.id, projectId: task.group_id })}
+                  >
+                    {task.status === "done" ? <CheckSquare size={15} /> : <Square size={15} />}
+                    <div className="day-event-main">
+                      <div className="day-event-top">
+                        {task.due_date && (
+                          <span className="day-event-time">
+                            {task.due_date}
+                            {task.due_time ? ` ${task.due_time.slice(0, 5)}` : ""}
+                          </span>
+                        )}
+                        <span className={`day-event-title ${task.status === "done" ? "done" : ""}`}>{task.title}</span>
+                      </div>
+                      <span className="day-task-project">{task.project_name}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {openTask && (
+        <TaskModal
+          client={client}
+          project={{ id: openTask.projectId, team_id: team.id }}
+          taskId={openTask.id}
+          currentUserId={currentUserId}
+          displayName={displayName}
+          avatarUrl={avatarUrl}
+          onClose={() => setOpenTask(null)}
+        />
+      )}
     </section>
   );
 }

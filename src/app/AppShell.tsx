@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { LayoutGrid, CalendarDays, Users, Settings, UserCircle, LogOut, Plus } from "lucide-react";
+import { LayoutGrid, CalendarDays, Users, Settings, UserCircle, LogOut, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { AppSession, Team } from "../types";
 import { Avatar } from "../components/ui/Avatar";
 import { useToast } from "../components/ui/ToastProvider";
@@ -28,6 +28,15 @@ export function AppShell({ session, onSignOut }: { session: AppSession; onSignOu
   const [currentTeamId, setCurrentTeamId] = useState<string | null>(null);
   const [newTeamName, setNewTeamName] = useState("");
   const [mobileNewTeamOpen, setMobileNewTeamOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("dta_sidebar_collapsed") === "1");
+
+  function toggleSidebar() {
+    setSidebarCollapsed((v) => {
+      const next = !v;
+      localStorage.setItem("dta_sidebar_collapsed", next ? "1" : "0");
+      return next;
+    });
+  }
 
   const teamsQuery = useQuery({
     queryKey: ["teams", userId],
@@ -89,13 +98,21 @@ export function AppShell({ session, onSignOut }: { session: AppSession; onSignOu
   });
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
+    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+      <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
         <div className="sidebar-brand">
           <span className="brand-mark">
             <LayoutGrid size={15} />
           </span>
-          Task Activity
+          <span className="sidebar-brand-text">Task Activity</span>
+          <button
+            className="btn-icon sidebar-collapse-toggle"
+            onClick={toggleSidebar}
+            aria-label={sidebarCollapsed ? "サイドバーを開く" : "サイドバーを閉じる"}
+            title={sidebarCollapsed ? "サイドバーを開く" : "サイドバーを閉じる"}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </button>
         </div>
 
         <div className="group-switcher">
@@ -124,9 +141,14 @@ export function AppShell({ session, onSignOut }: { session: AppSession; onSignOu
 
         <nav className="nav">
           {TABS.map(({ id, label, icon: Icon }) => (
-            <button key={id} className={`nav-item ${tab === id ? "active" : ""}`} onClick={() => setTab(id)}>
+            <button
+              key={id}
+              className={`nav-item ${tab === id ? "active" : ""}`}
+              onClick={() => setTab(id)}
+              title={sidebarCollapsed ? label : undefined}
+            >
               <Icon size={16} />
-              {label}
+              <span>{label}</span>
             </button>
           ))}
         </nav>
@@ -142,11 +164,6 @@ export function AppShell({ session, onSignOut }: { session: AppSession; onSignOu
 
       <div className="main">
         <header className="topbar">
-          <div>
-            <h1>{currentTeam?.name ?? "チーム未選択"}</h1>
-            <p className="topbar-subtitle">{TABS.find((t) => t.id === tab)?.label}</p>
-          </div>
-
           <div className="topbar-mobile-groups">
             <select
               className="mobile-group-select"
@@ -203,7 +220,9 @@ export function AppShell({ session, onSignOut }: { session: AppSession; onSignOu
               {tab === "events" && (
                 <EventsView client={client} team={currentTeam} currentUserId={userId} displayName={displayName} avatarUrl={avatarUrl} />
               )}
-              {tab === "members" && <MembersView client={client} team={currentTeam} currentUserId={userId} />}
+              {tab === "members" && (
+                <MembersView client={client} team={currentTeam} currentUserId={userId} displayName={displayName} avatarUrl={avatarUrl} />
+              )}
               {tab === "settings" && <TeamSettingsView client={client} team={currentTeam} currentUserId={userId} />}
             </>
           )}

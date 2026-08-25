@@ -70,7 +70,12 @@ function computePopupPosition(rect: DOMRect) {
 
 type EventFormState = { title: string; startTime: string; endTime: string; description: string; reminderMinutes: number | null };
 const EMPTY_FORM: EventFormState = { title: "", startTime: "10:00", endTime: "", description: "", reminderMinutes: null };
-type CalendarTask = Pick<TaskSummary, "id" | "group_id" | "title" | "description" | "status" | "priority" | "due_date" | "due_time" | "project_name">;
+type CalendarTask = Pick<
+  TaskSummary,
+  "id" | "group_id" | "title" | "description" | "status" | "priority" | "due_date" | "due_time" | "project_name" | "assigned_to" | "assigned_to_all"
+>;
+type FilterType = "all" | "events" | "tasks";
+type TeamMemberLite = { supabase_user_id: string; profiles: { display_name: string | null; discord_username: string | null } | null };
 
 export function EventsView({
   client,
@@ -99,6 +104,23 @@ export function EventsView({
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EventFormState>(EMPTY_FORM);
+
+  const [filterAssignee, setFilterAssignee] = useState<string>("all");
+  const [filterType, setFilterType] = useState<FilterType>("all");
+
+  const membersQuery = useQuery({
+    queryKey: ["team-members-lite", team.id],
+    queryFn: async () => {
+      const { data, error } = await client
+        .from("team_members")
+        .select("supabase_user_id, profiles(display_name, discord_username)")
+        .eq("team_id", team.id)
+        .eq("status", "active");
+      if (error) throw error;
+      return (data ?? []) as unknown as TeamMemberLite[];
+    },
+  });
+  const teamMembers = membersQuery.data ?? [];
 
   const queryKey = ["events", team.id];
   const query = useQuery({
@@ -129,7 +151,7 @@ export function EventsView({
     queryFn: async () => {
       const { data, error } = await client
         .from("task_summary")
-        .select("id,group_id,title,description,status,priority,due_date,due_time,project_name")
+        .select("id,group_id,title,description,status,priority,due_date,due_time,project_name,assigned_to,assigned_to_all")
         .eq("team_id", team.id)
         .not("due_date", "is", null)
         .order("due_date");
@@ -147,9 +169,23 @@ export function EventsView({
 
   const dueTasks = tasksQuery.data ?? [];
 
+  /**
+   * 予定(events)には担当者の概念が無いため、アカウントでのフィルターは効かせない
+   * (種別フィルターで「タスクのみ」を選んだ場合のみ非表示にする)。
+   */
+  const filteredEvents = useMemo(() => {
+    if (filterType === "tasks") return [];
+    return events;
+  }, [events, filterType]);
+
+  const filteredTasks = useMemo(() => {
+    if (filterType === "events") return [];
+    return dueTasks.filter((t) => filterAssignee === "all" || t.assigned_to === filterAssignee || t.assigned_to_all);
+  }, [dueTasks, filterType, filterAssignee]);
+
   const eventsByDay = useMemo(() => {
     const map = new Map<string, EventItem[]>();
-    for (const event of events) {
+    for (const event of filteredEvents) {
       const key = dateKey(new Date(event.start_at));
       const list = map.get(key) ?? [];
       list.push(event);
@@ -157,11 +193,11 @@ export function EventsView({
     }
     for (const list of map.values()) list.sort((a, b) => a.start_at.localeCompare(b.start_at));
     return map;
-  }, [events]);
+  }, [filteredEvents]);
 
   const tasksByDay = useMemo(() => {
     const map = new Map<string, CalendarTask[]>();
-    for (const task of dueTasks) {
+    for (const task of filteredTasks) {
       if (!task.due_date) continue;
       const list = map.get(task.due_date) ?? [];
       list.push(task);
@@ -169,7 +205,7 @@ export function EventsView({
     }
     for (const list of map.values()) list.sort((a, b) => (a.due_time ?? "").localeCompare(b.due_time ?? ""));
     return map;
-  }, [dueTasks]);
+  }, [filteredTasks]);
 
   const grid = useMemo(() => buildMonthGrid(cursor.getFullYear(), cursor.getMonth()), [cursor]);
   const selectedEvents = selectedDate ? eventsByDay.get(dateKey(selectedDate)) ?? [] : [];
@@ -289,6 +325,33 @@ export function EventsView({
             </button>
           </div>
         </header>
+
+        <div className="calendar-filters">
+          <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)} aria-label="担当者でフィルター">
+            <option value="all">担当者: すべて</option>
+            {teamMembers.map((m) => (
+              <option key={m.supabase_user_id} value={m.supabase_user_id}>
+                {m.profiles?.display_name ?? m.profiles?.discord_username ?? "メンバー"}
+              </option>
+            ))}
+          </select>
+          <select value={filterType} onChange={(e) => setFilterType(e.target.value as FilterType)} aria-label="種別でフィルター">
+            <option value="all">種別: すべて</option>
+            <option value="events">予定のみ</option>
+            <option value="tasks">タスクのみ</option>
+          </select>
+          {(filterAssignee !== "all" || filterType !== "all") && (
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                setFilterAssignee("all");
+                setFilterType("all");
+              }}
+            >
+              フィルター解除
+            </button>
+          )}
+        </div>
 
         <div className="calendar-weekdays">
           {WEEKDAYS.map((w, i) => (

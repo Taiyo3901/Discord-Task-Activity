@@ -49,7 +49,7 @@ export async function getMyProfile(client: SupabaseClient, userId: string): Prom
   return data;
 }
 
-/** 自分のDiscord User ID宛のpending招待を承諾してグループへ参加する。ログイン完了時に毎回呼ぶ。 */
+/** 自分のDiscord User ID宛のpending招待を承諾してチームへ参加する。ログイン完了時に毎回呼ぶ。 */
 export async function acceptPendingInvites(client: SupabaseClient): Promise<number> {
   const { data, error } = await client.rpc("accept_my_discord_invites");
   if (error) throw error;

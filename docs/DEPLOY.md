@@ -32,7 +32,7 @@ Discordクライアント(ボイスチャンネル埋め込み)
 
    なお、DiscordのURL Mappings UIは変更されることがあるため、上記と画面表示が異なる場合はスクリーンショットを共有してもらえれば個別に確認します。
 6. 「Interactions Endpoint URL」に、後述のEdge Function `discord-interactions` のURLを設定（Discordが即座にPINGを送るので、先にEdge Functionをデプロイしてから設定する）。
-7. スラッシュコマンドを登録する場合は、Discord公式のREST APIか`discord.js`等で `/task add` コマンド（`title`必須文字列オプション、`due`任意文字列オプション）をアプリケーションコマンドとして一度登録してください（登録はローカルから一度実行すればよく、常駐プロセスは不要です）。
+7. スラッシュコマンドを登録する場合は、Discord公式のREST APIか`discord.js`等で `/task add` コマンド（`title`必須文字列オプション、`due`任意文字列オプション、`project`任意文字列オプション＝チームに複数プロジェクトがある場合の追加先指定）をアプリケーションコマンドとして一度登録してください（登録はローカルから一度実行すればよく、常駐プロセスは不要です）。チーム構造への移行に伴い`project`オプションを追加した場合は、既存のコマンド定義をこの内容で再登録（PATCH/PUT）してください。
 
 ## 2. Supabase
 
@@ -104,8 +104,8 @@ StorageバケットとRLSは`001_init.sql`/`002_redesign.sql`の適用で自動�
 - ブラウザで直接VercelのURLを開くと、通常のSupabase Discord OAuthログイン画面が出ます（Discord Activity外でのフォールバック、開発確認用）。この場合、Supabase Dashboard の Authentication → Providers → Discord で Client ID/Secret を別途設定しておく必要があります。
 - Discordデスクトップアプリでボイスチャンネルに入り、Activity一覧からこのアプリを起動すると、自動的にDiscordアカウントでログインされ、ボードが表示されます。
 - 複数アカウントで同じタスクを同時に開き、プレゼンス表示・自動保存・競合検知が動くことを確認してください。
-- グループ設定でDiscord Webhook URLを登録し、期限を今日の日付にしたタスクを作成後、最大30分待つ（またはSQL Editorで`select public.notify_due_tasks();`を手動実行）とDiscordチャンネルに通知が届きます。
-- Discordサーバーの任意チャンネルで `/task add title:テスト` を実行し、該当グループにタスクが追加されることを確認してください（グループ設定でサーバーIDを連携し、実行者がTask Activityでログイン済みである必要があります）。
+- チーム設定でDiscord Webhook URLを登録し、期限を今日の日付にしたタスクを作成後、最大30分待つ（またはSQL Editorで`select public.notify_due_tasks();`を手動実行）とDiscordチャンネルに通知が届きます。
+- Discordサーバーの任意チャンネルで `/task add title:テスト` を実行し、該当チームのプロジェクトにタスクが追加されることを確認してください（チーム設定でサーバーIDを連携し、実行者がTask Activityでログイン済みである必要があります。チームに複数プロジェクトがある場合は `project:` オプションで対象を指定します）。
 
 ## 付録: 各値の取得方法まとめ
 
@@ -120,8 +120,8 @@ StorageバケットとRLSは`001_init.sql`/`002_redesign.sql`の適用で自動�
 | `VITE_DISCORD_CLIENT_ID` / `DISCORD_CLIENT_ID` | トップ「General Information」ページの「APPLICATION ID」、または左メニュー「OAuth2」→ Generalの「CLIENT ID」（同じ値） |
 | `DISCORD_CLIENT_SECRET` | 左メニュー「OAuth2」→ Generalの「CLIENT SECRET」欄。初回は隠れているので「Reset Secret」を押すと表示される。**表示されるのはこの瞬間だけ**なのですぐコピーして控える（再表示するには再度Resetが必要で、古いSecretは無効になる） |
 | `DISCORD_PUBLIC_KEY` | トップ「General Information」ページ下部の「Public Key」欄（Resetボタン不要、常時表示） |
-| Guild ID（グループ設定の「連携するサーバーID」） | Discordアプリ本体で 設定 → 詳細設定 →「開発者モード」をON → 対象サーバーのアイコンを右クリック →「サーバーIDをコピー」 |
-| Discord Webhook URL（グループ設定の通知先） | Discordアプリで対象チャンネルの歯車アイコン →「連携サービス」→「ウェブフック」→「新しいウェブフックを作成」→「ウェブフックURLをコピー」 |
+| Guild ID（チーム設定の「連携するサーバーID」） | Discordアプリ本体で 設定 → 詳細設定 →「開発者モード」をON → 対象サーバーのアイコンを右クリック →「サーバーIDをコピー」 |
+| Discord Webhook URL（チーム設定の通知先） | Discordアプリで対象チャンネルの歯車アイコン →「連携サービス」→「ウェブフック」→「新しいウェブフックを作成」→「ウェブフックURLをコピー」 |
 | 招待相手のDiscord User ID | 開発者モードON後、相手のユーザー名を右クリック →「ユーザーIDをコピー」（自分のIDはアプリの「アカウント」画面にも表示されます） |
 
 ### Supabase (https://supabase.com/dashboard)

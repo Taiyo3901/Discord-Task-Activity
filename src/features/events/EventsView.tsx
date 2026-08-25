@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, CheckSquare, ChevronLeft, ChevronRight, Pencil, Plus, Square, Trash2 } from "lucide-react";
-import type { EventItem, Group, TaskSummary } from "../../types";
+import type { EventItem, Team, TaskSummary } from "../../types";
 import { useToast } from "../../components/ui/ToastProvider";
 import { useRealtimeInvalidate } from "../../hooks/useRealtimeInvalidate";
 import { REMINDER_OPTIONS } from "../../lib/reminders";
@@ -70,17 +70,17 @@ function computePopupPosition(rect: DOMRect) {
 
 type EventFormState = { title: string; startTime: string; endTime: string; description: string; reminderMinutes: number | null };
 const EMPTY_FORM: EventFormState = { title: "", startTime: "10:00", endTime: "", description: "", reminderMinutes: null };
-type CalendarTask = Pick<TaskSummary, "id" | "title" | "description" | "status" | "priority" | "due_date" | "due_time">;
+type CalendarTask = Pick<TaskSummary, "id" | "group_id" | "title" | "description" | "status" | "priority" | "due_date" | "due_time" | "project_name">;
 
 export function EventsView({
   client,
-  group,
+  team,
   currentUserId,
   displayName,
   avatarUrl,
 }: {
   client: SupabaseClient;
-  group: Group;
+  team: Team;
   currentUserId: string;
   displayName: string;
   avatarUrl: string | null;
@@ -91,7 +91,7 @@ export function EventsView({
   const today = new Date();
   const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const [openTask, setOpenTask] = useState<{ id: string; projectId: string } | null>(null);
   const [popupPos, setPopupPos] = useState<{ top: number; left: number } | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -100,34 +100,50 @@ export function EventsView({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EventFormState>(EMPTY_FORM);
 
-  const queryKey = ["events", group.id];
+  const queryKey = ["events", team.id];
   const query = useQuery({
     queryKey,
     queryFn: async () => {
-      const { data, error } = await client.from("events").select("*").eq("group_id", group.id).order("start_at");
+      const { data, error } = await client.from("events").select("*").eq("team_id", team.id).order("start_at");
       if (error) throw error;
       return (data ?? []) as EventItem[];
     },
   });
-  useRealtimeInvalidate(client, `events-${group.id}`, "events", `group_id=eq.${group.id}`, queryKey);
+  useRealtimeInvalidate(client, `events-${team.id}`, "events", `team_id=eq.${team.id}`, queryKey);
 
   const events = query.data ?? [];
 
-  const tasksQueryKey = ["calendar-tasks", group.id];
+  const projectIdsQuery = useQuery({
+    queryKey: ["project-ids", team.id],
+    queryFn: async () => {
+      const { data, error } = await client.from("groups").select("id").eq("team_id", team.id);
+      if (error) throw error;
+      return (data ?? []).map((p) => p.id as string);
+    },
+  });
+  const projectIds = projectIdsQuery.data ?? [];
+
+  const tasksQueryKey = ["calendar-tasks", team.id];
   const tasksQuery = useQuery({
     queryKey: tasksQueryKey,
     queryFn: async () => {
       const { data, error } = await client
         .from("task_summary")
-        .select("id,title,description,status,priority,due_date,due_time")
-        .eq("group_id", group.id)
+        .select("id,group_id,title,description,status,priority,due_date,due_time,project_name")
+        .eq("team_id", team.id)
         .not("due_date", "is", null)
         .order("due_date");
       if (error) throw error;
       return (data ?? []) as CalendarTask[];
     },
   });
-  useRealtimeInvalidate(client, `calendar-tasks-${group.id}`, "tasks", `group_id=eq.${group.id}`, tasksQueryKey);
+  useRealtimeInvalidate(
+    client,
+    `calendar-tasks-${team.id}`,
+    "tasks",
+    `group_id=in.(${projectIds.length > 0 ? projectIds.join(",") : "00000000-0000-0000-0000-000000000000"})`,
+    tasksQueryKey,
+  );
 
   const dueTasks = tasksQuery.data ?? [];
 
@@ -196,7 +212,7 @@ export function EventsView({
       const startAt = combineDateTime(selectedDate, addForm.startTime);
       const endAt = addForm.endTime ? combineDateTime(selectedDate, addForm.endTime) : null;
       const { error } = await client.from("events").insert({
-        group_id: group.id,
+        team_id: team.id,
         title: addForm.title.trim(),
         description: addForm.description.trim() || null,
         start_at: startAt.toISOString(),
@@ -309,7 +325,13 @@ export function EventsView({
                     </span>
                   ))}
                   {visibleTasks.map((task) => (
-                    <span key={`t-${task.id}`} className="calendar-task-pill" data-priority={task.priority}>
+                    <span
+                      key={`t-${task.id}`}
+                      className="calendar-task-pill"
+                      data-priority={task.priority}
+                      title={`${task.project_name} / ${task.title}`}
+                    >
+                      <span className="calendar-task-project">{task.project_name}</span>
                       <span className={`calendar-event-title ${task.status === "done" ? "done" : ""}`}>{task.title}</span>
                     </span>
                   ))}
@@ -389,7 +411,7 @@ export function EventsView({
                     value={addForm.reminderMinutes ?? "default"}
                     onChange={(e) => setAddForm((f) => ({ ...f, reminderMinutes: e.target.value === "default" ? null : Number(e.target.value) }))}
                   >
-                    <option value="default">グループの既定値を使う</option>
+                    <option value="default">チームの既定値を使う</option>
                     {REMINDER_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
                         {o.label}
@@ -446,7 +468,7 @@ export function EventsView({
                         value={editForm.reminderMinutes ?? "default"}
                         onChange={(e) => setEditForm((f) => ({ ...f, reminderMinutes: e.target.value === "default" ? null : Number(e.target.value) }))}
                       >
-                        <option value="default">グループの既定値を使う</option>
+                        <option value="default">チームの既定値を使う</option>
                         {REMINDER_OPTIONS.map((o) => (
                           <option key={o.value} value={o.value}>
                             {o.label}
@@ -504,13 +526,19 @@ export function EventsView({
                 <h4>期限タスク</h4>
                 <div className="day-panel-list">
                   {selectedTasks.map((task) => (
-                    <button className="day-task-card" key={task.id} data-priority={task.priority} onClick={() => setOpenTaskId(task.id)}>
+                    <button
+                      className="day-task-card"
+                      key={task.id}
+                      data-priority={task.priority}
+                      onClick={() => setOpenTask({ id: task.id, projectId: task.group_id })}
+                    >
                       {task.status === "done" ? <CheckSquare size={15} /> : <Square size={15} />}
                       <div className="day-event-main">
                         <div className="day-event-top">
                           {task.due_time && <span className="day-event-time">{task.due_time.slice(0, 5)}</span>}
                           <span className={`day-event-title ${task.status === "done" ? "done" : ""}`}>{task.title}</span>
                         </div>
+                        <span className="day-task-project">{task.project_name}</span>
                         {task.description && <p className="day-event-desc">{task.description}</p>}
                       </div>
                     </button>
@@ -522,15 +550,15 @@ export function EventsView({
         </>
       )}
 
-      {openTaskId && (
+      {openTask && (
         <TaskModal
           client={client}
-          group={group}
-          taskId={openTaskId}
+          project={{ id: openTask.projectId, team_id: team.id }}
+          taskId={openTask.id}
           currentUserId={currentUserId}
           displayName={displayName}
           avatarUrl={avatarUrl}
-          onClose={() => setOpenTaskId(null)}
+          onClose={() => setOpenTask(null)}
         />
       )}
     </div>

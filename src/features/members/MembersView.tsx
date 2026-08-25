@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
-import type { Group, Role } from "../../types";
+import type { Role, Team } from "../../types";
 import { useToast } from "../../components/ui/ToastProvider";
 import { Avatar } from "../../components/ui/Avatar";
 
@@ -14,23 +14,23 @@ type Member = {
 };
 type LookupResult = { discord_user_id: string; display_name: string | null; avatar_url: string | null; discord_username: string | null };
 
-export function MembersView({ client, group, currentUserId }: { client: SupabaseClient; group: Group; currentUserId: string }) {
+export function MembersView({ client, team, currentUserId }: { client: SupabaseClient; team: Team; currentUserId: string }) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [username, setUsername] = useState("");
   const [role, setRole] = useState<Role>("member");
 
-  const membersKey = ["members", group.id];
-  const invitesKey = ["invites", group.id];
+  const membersKey = ["members", team.id];
+  const invitesKey = ["invites", team.id];
   const trimmedUsername = username.trim().replace(/^@/, "");
 
   const membersQuery = useQuery({
     queryKey: membersKey,
     queryFn: async () => {
       const { data, error } = await client
-        .from("group_members")
+        .from("team_members")
         .select("id,supabase_user_id,role,profiles(display_name,discord_username,avatar_url)")
-        .eq("group_id", group.id)
+        .eq("team_id", team.id)
         .eq("status", "active");
       if (error) throw error;
       return (data ?? []) as unknown as Member[];
@@ -57,7 +57,7 @@ export function MembersView({ client, group, currentUserId }: { client: Supabase
     mutationFn: async () => {
       if (!matched) throw new Error("ユーザーネームが見つかりません。");
       const { error } = await client.from("invites").insert({
-        group_id: group.id,
+        team_id: team.id,
         discord_user_id: matched.discord_user_id,
         role,
         status: "pending",
@@ -75,7 +75,7 @@ export function MembersView({ client, group, currentUserId }: { client: Supabase
 
   const changeRole = useMutation({
     mutationFn: async ({ id, nextRole }: { id: string; nextRole: Role }) => {
-      const { error } = await client.from("group_members").update({ role: nextRole }).eq("id", id);
+      const { error } = await client.from("team_members").update({ role: nextRole }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: membersKey }),
@@ -84,21 +84,21 @@ export function MembersView({ client, group, currentUserId }: { client: Supabase
 
   const removeMember = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await client.from("group_members").delete().eq("id", id);
+      const { error } = await client.from("team_members").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: membersKey }),
     onError: (error) => toast(error instanceof Error ? error.message : "削除に失敗しました。", "error"),
   });
 
-  const leaveGroup = useMutation({
+  const leaveTeam = useMutation({
     mutationFn: async () => {
-      const { error } = await client.rpc("leave_group", { gid: group.id });
+      const { error } = await client.rpc("leave_team", { tid: team.id });
       if (error) throw error;
     },
     onSuccess: () => {
-      toast("グループから脱退しました。", "success");
-      void queryClient.invalidateQueries({ queryKey: ["groups", currentUserId] });
+      toast("チームから脱退しました。", "success");
+      void queryClient.invalidateQueries({ queryKey: ["teams", currentUserId] });
     },
     onError: (error) => toast(error instanceof Error ? error.message : "脱退に失敗しました。", "error"),
   });
@@ -106,6 +106,7 @@ export function MembersView({ client, group, currentUserId }: { client: Supabase
   return (
     <section className="panel">
       <h2>メンバー</h2>
+      <p className="field-hint">チームに参加すると、チーム内のすべてのプロジェクトに自動的にアクセスできるようになります。</p>
 
       {isAdmin && (
         <div className="toolbar-row">
@@ -166,8 +167,8 @@ export function MembersView({ client, group, currentUserId }: { client: Supabase
       </div>
 
       <div className="panel-section">
-        <button className="btn btn-danger" onClick={() => window.confirm("このグループから脱退しますか？") && leaveGroup.mutate()}>
-          グループから脱退
+        <button className="btn btn-danger" onClick={() => window.confirm("このチームから脱退しますか？") && leaveTeam.mutate()}>
+          チームから脱退
         </button>
       </div>
     </section>

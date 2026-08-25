@@ -54,6 +54,7 @@ Deno.serve(async (req) => {
 
   const title = findOption(subcommand.options, "title")?.trim();
   const dueDate = findOption(subcommand.options, "due");
+  const projectName = findOption(subcommand.options, "project")?.trim();
   const discordUserId = interaction.member?.user?.id ?? interaction.user?.id;
   const guildId = interaction.guild_id;
 
@@ -63,27 +64,43 @@ Deno.serve(async (req) => {
 
   const admin = createAdminClient();
 
-  const { data: group } = await admin.from("groups").select("id, name").eq("discord_guild_id", guildId).maybeSingle();
-  if (!group) return reply("このサーバーに連携されたグループがありません。Task Activityの「設定」からサーバーIDを連携してください。");
+  const { data: team } = await admin.from("teams").select("id, name").eq("discord_guild_id", guildId).maybeSingle();
+  if (!team) return reply("このサーバーに連携されたチームがありません。Task Activityの「設定」からサーバーIDを連携してください。");
 
   const { data: profile } = await admin.from("profiles").select("id").eq("discord_user_id", discordUserId).maybeSingle();
   if (!profile) return reply("先にTask Activityでログインしてください。");
 
   const { data: membership } = await admin
-    .from("group_members")
+    .from("team_members")
     .select("role")
-    .eq("group_id", group.id)
+    .eq("team_id", team.id)
     .eq("supabase_user_id", profile.id)
     .eq("status", "active")
     .maybeSingle();
   if (!membership || !["owner", "admin", "member"].includes(membership.role)) {
-    return reply("このグループでタスクを作成する権限がありません。");
+    return reply("このチームでタスクを作成する権限がありません。");
+  }
+
+  const { data: projects } = await admin.from("groups").select("id, name").eq("team_id", team.id);
+  if (!projects || projects.length === 0) {
+    return reply("このチームにはまだプロジェクトがありません。先にTask Activityでプロジェクトを作成してください。");
+  }
+
+  let project = projects[0];
+  if (projectName) {
+    const matched = projects.find((p) => p.name.toLowerCase() === projectName.toLowerCase());
+    if (!matched) {
+      return reply(`「${projectName}」というプロジェクトが見つかりません。候補: ${projects.map((p) => p.name).join(" / ")}`);
+    }
+    project = matched;
+  } else if (projects.length > 1) {
+    return reply(`このチームには複数のプロジェクトがあります。project オプションで指定してください。候補: ${projects.map((p) => p.name).join(" / ")}`);
   }
 
   const { data: task, error: taskError } = await admin
     .from("tasks")
     .insert({
-      group_id: group.id,
+      group_id: project.id,
       title,
       status: "todo",
       priority: 2,
@@ -95,5 +112,5 @@ Deno.serve(async (req) => {
     .single();
   if (taskError || !task) return reply(`タスク作成に失敗しました: ${taskError?.message ?? "不明なエラー"}`);
 
-  return reply(`✅ 「${group.name}」に「${title}」を追加しました。`);
+  return reply(`✅ 「${project.name}」に「${title}」を追加しました。`);
 });

@@ -19,7 +19,7 @@ export type Profile = {
   discord_username: string | null;
 };
 
-export type Group = {
+export type Team = {
   id: string;
   name: string;
   discord_guild_id: string | null;
@@ -30,8 +30,17 @@ export type Group = {
   created_at: string;
 };
 
+export type Project = {
+  id: string;
+  name: string;
+  team_id: string;
+  created_by: string;
+  created_at: string;
+};
+
 export type Task = {
   id: string;
+  /** groupsテーブル(=プロジェクト)への外部キー。DB列名は互換のためgroup_idのまま。 */
   group_id: string;
   title: string;
   description: string | null;
@@ -50,6 +59,8 @@ export type Task = {
 };
 
 export type TaskSummary = Task & {
+  team_id: string;
+  project_name: string;
   assignee_display_name: string | null;
   assignee_avatar_url: string | null;
   link_count: number;
@@ -68,7 +79,7 @@ export type TaskPageBlock = {
 
 export type EventItem = {
   id: string;
-  group_id: string;
+  team_id: string;
   title: string;
   description: string | null;
   start_at: string;

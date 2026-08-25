@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Trash2, X } from "lucide-react";
-import type { Group, PresencePayload, Task, TaskPageBlock, TaskStatus } from "../../types";
+import type { PresencePayload, Project, Task, TaskPageBlock, TaskStatus } from "../../types";
 import { Modal } from "../../components/ui/Modal";
 import { Avatar } from "../../components/ui/Avatar";
 import { useToast } from "../../components/ui/ToastProvider";
@@ -30,7 +30,7 @@ function relativeTime(iso: string): string {
 
 export function TaskModal({
   client,
-  group,
+  project,
   taskId,
   currentUserId,
   displayName,
@@ -38,7 +38,7 @@ export function TaskModal({
   onClose,
 }: {
   client: SupabaseClient;
-  group: Group;
+  project: Pick<Project, "id" | "team_id">;
   taskId: string;
   currentUserId: string;
   displayName: string;
@@ -58,12 +58,12 @@ export function TaskModal({
   });
 
   const membersQuery = useQuery({
-    queryKey: ["group-members-lite", group.id],
+    queryKey: ["team-members-lite", project.team_id],
     queryFn: async () => {
       const { data, error } = await client
-        .from("group_members")
+        .from("team_members")
         .select("supabase_user_id, profiles(display_name)")
-        .eq("group_id", group.id)
+        .eq("team_id", project.team_id)
         .eq("status", "active");
       if (error) throw error;
       return (data ?? []) as unknown as Member[];
@@ -82,7 +82,7 @@ export function TaskModal({
 
   const invalidateTask = () => {
     void queryClient.invalidateQueries({ queryKey: ["task", taskId] });
-    void queryClient.invalidateQueries({ queryKey: ["tasks", group.id] });
+    void queryClient.invalidateQueries({ queryKey: ["tasks", project.id] });
   };
 
   const updateTask = useMutation({
@@ -118,7 +118,7 @@ export function TaskModal({
       if (error) throw error;
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["tasks", group.id] });
+      void queryClient.invalidateQueries({ queryKey: ["tasks", project.id] });
       closeModal();
     },
     onError: (error) => toast(error instanceof Error ? error.message : "削除に失敗しました。", "error"),
@@ -361,7 +361,7 @@ export function TaskModal({
               value={task.reminder_minutes ?? "default"}
               onChange={(e) => updateTask.mutate({ reminder_minutes: e.target.value === "default" ? null : Number(e.target.value) })}
             >
-              <option value="default">グループの既定値を使う</option>
+              <option value="default">チームの既定値を使う</option>
               {REMINDER_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
@@ -402,7 +402,7 @@ export function TaskModal({
           </div>
 
           <LinksPanel client={client} taskId={taskId} userId={currentUserId} />
-          <AttachmentsPanel client={client} taskId={taskId} groupId={group.id} userId={currentUserId} />
+          <AttachmentsPanel client={client} taskId={taskId} projectId={project.id} userId={currentUserId} />
         </aside>
       </div>
 

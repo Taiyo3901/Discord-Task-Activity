@@ -8,7 +8,7 @@ Discord Activity(埋め込みiframe) / 通常ブラウザ(開発用フォール�
     ├─ Supabase JS client（自前JWTをAuthorizationヘッダ + realtime.setAuthへ手動適用）
     └─ @tanstack/react-query（キャッシュ・楽観的更新・Realtime通知でのキャッシュ無効化）
 Supabase
-  ├─ Postgres + RLS（001_init.sql + 002_redesign.sql）
+  ├─ Postgres + RLS（001〜008の migrations、直近の008でチーム/プロジェクト構造へ再編）
   ├─ Edge Functions
   │    ├─ discord-token-exchange: Discordのcode→access_token交換(client_secret保持)、
   │    │     profiles upsert、自前HS256 JWT発行
@@ -37,11 +37,20 @@ Discord Activity外（`npm run dev`でのローカル確認など）では、従
 - タスク本文は最後の入力から3秒後に保存。
 - `task_pages.version` を条件付き更新し、同時保存を検知（競合時はモーダル内で「最新版を見る/自分の内容で上書き」を選択）。
 
+## 構造: チーム / プロジェクト / カレンダー
+
+- **チーム**（`teams`）: Discordサーバー1つに対応する最上位単位。Discordサーバー連携（`discord_guild_id`）、通知用Webhook（`discord_webhook_url`）、リマインド既定値、メンバーシップ（`team_members`）を保持する。
+- **プロジェクト**（`groups`テーブル、物理名は移行コストの都合で変更していない）: チーム配下のかんばんボード単位。1チームに複数作成でき、タスクのみを持つ。チームに参加すると、そのチーム内の全プロジェクトへ自動的にアクセスできる（プロジェクト単位の個別メンバーシップは廃止）。
+- **カレンダー**（`events`）: プロジェクト単位ではなくチームに1つだけ存在し、チーム内の全プロジェクトのタスク期限（`task_summary`ビューが`team_id`/`project_name`を含む）とチームレベルの予定を横断的に表示する。
+- 通知（`notify_due_tasks()`）もチーム単位に集約され、チーム内のどのプロジェクトのタスク/どの予定であっても、チームに設定した1つのDiscordチャンネル（Webhook）へまとめて送信される。
+
 ## 権限
 
 - owner: 全管理
-- admin: 招待、メンバー管理、編集、グループ設定
+- admin: 招待、メンバー管理、編集、チーム設定・プロジェクト管理
 - member: 通常編集（タスク・予定・リンク・添付の作成/更新/削除）
-- viewer: 読み取り専用（`is_group_editor()`を書き込み系RLSポリシーで使うことで強制）
+- viewer: 読み取り専用（`is_team_editor()`/`is_group_editor()`を書き込み系RLSポリシーで使うことで強制）
 
-`profiles`テーブルは自分自身、または同じグループに所属する相手のみ閲覧可能。
+`is_group_member`/`is_group_admin`/`is_group_editor`はプロジェクトIDを受け取りつつ、内部では対応するチームの`is_team_member`/`is_team_admin`/`is_team_editor`へ委譲する形に作り直されている（シグネチャを変えないことで、既存の全RLSポリシーを無修正のまま流用している）。
+
+`profiles`テーブルは自分自身、または同じチームに所属する相手のみ閲覧可能。

@@ -43,12 +43,12 @@ function AttachmentThumb({
 export function AttachmentsPanel({
   client,
   taskId,
-  groupId,
+  projectId,
   userId,
 }: {
   client: SupabaseClient;
   taskId: string;
-  groupId: string;
+  projectId: string;
   userId: string;
 }) {
   const queryClient = useQueryClient();
@@ -77,7 +77,7 @@ export function AttachmentsPanel({
 
     setBusy(true);
     const safe = file.name.replace(/[^A-Za-z0-9._-]/g, "_");
-    const path = `${groupId}/${taskId}/${userId}/${crypto.randomUUID()}_${safe}`;
+    const path = `${projectId}/${taskId}/${userId}/${crypto.randomUUID()}_${safe}`;
     const { error: uploadError } = await client.storage.from(BUCKET).upload(path, file, { upsert: false });
     if (uploadError) {
       toast(uploadError.message, "error");

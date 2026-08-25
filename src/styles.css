@@ -302,6 +302,32 @@ a {
   min-width: 0;
 }
 
+.project-switcher {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.project-switcher select {
+  font-weight: 600;
+  min-width: 160px;
+}
+.project-switcher input {
+  flex: 1;
+  min-width: 0;
+  max-width: 220px;
+}
+@media (max-width: 860px) {
+  .project-switcher {
+    flex-wrap: wrap;
+  }
+  .project-switcher select,
+  .project-switcher input {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+}
+
 .nav {
   display: flex;
   flex-direction: column;
@@ -1217,7 +1243,9 @@ a {
 }
 
 .calendar-task-pill {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   background: var(--bg-hover);
   border-left: 3px solid var(--text-faint);
   color: var(--text-muted);
@@ -1227,6 +1255,22 @@ a {
   font-weight: 600;
   width: 100%;
   min-width: 0;
+}
+.calendar-task-project {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40%;
+  color: var(--text-faint);
+  font-weight: 500;
+}
+.day-task-project {
+  display: block;
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 2px;
 }
 .calendar-task-pill[data-priority="1"] {
   border-left-color: var(--text-faint);
